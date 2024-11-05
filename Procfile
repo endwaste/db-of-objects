@@ -1,1 +1,1 @@
-web: pip install boto3 pinecone-client==4.1.0 openai-clip ffmpeg uvicorn[standard] && uvicorn api.index:app --host 0.0.0.0 --port 8000
+web: docker build -t db-of-objects-app . && docker run -p $PORT:8000 db-of-objects-app
