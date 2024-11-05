@@ -9,7 +9,5 @@ google-auth-oauthlib==1.2.0
 google-auth-httplib2==0.2.0
 python-multipart
 Pillow
-torch
-torchvision
 openai-clip
 ffmpeg
