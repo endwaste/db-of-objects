@@ -3,3 +3,8 @@ pydantic==2.7.1
 requests==2.31.0
 python-multipart
 Pillow
+torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+
+
+
