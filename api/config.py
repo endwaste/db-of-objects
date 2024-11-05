@@ -1,11 +1,6 @@
 import os
-import base64
 import boto3
-from datetime import datetime, timedelta
-from google.oauth2 import service_account
-from google.auth.transport.requests import Request
 from dotenv import load_dotenv
-from botocore.exceptions import NoCredentialsError, ClientError
 
 load_dotenv(".env.development")
 
