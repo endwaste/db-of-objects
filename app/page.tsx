@@ -16,20 +16,9 @@ import Footer from './components/Footer';
 import { handleFileUpload } from './components/FileUploadHandler';
 
 // Handles Python backend API URL based on the environment
-const API_URL = (() => {
-  switch (process.env.NEXT_PUBLIC_VERCEL_ENV) {
-    case "development":
-      return process.env.NEXT_PUBLIC_DEVELOPMENT_URL || 'http://localhost:8000';
-    case "preview":
-      return `https://${process.env.NEXT_PUBLIC_VERCEL_URL || ''}`;
-    case "production":
-      return `https://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL || ''}`;
-    case "demo":
-      return "https://shop-the-look.sample-app.pinecone.io";
-    default:
-      return "http://localhost:8000";
-  }
-})();
+const API_URL = process.env.NODE_ENV === "production"
+  ? process.env.REACT_APP_API_URL || 'https://db-of-objects-app.herokuapp.com'
+  : 'http://localhost:8000';
 
 interface Result {
   score: number;
