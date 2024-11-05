@@ -1,5 +1,5 @@
 {
-  "name": "Shop The Look",
+  "name": "DB of objects app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,7 +7,7 @@
     "next-dev": "npm install; next dev",
     "dev": "concurrently \"npm run next-dev\" \"npm run fastapi-dev\"",
     "build": "next build",
-    "start": "next start",
+    "start": "concurrently \"next start\" \"pip3 install -r requirements.txt && python3 -m uvicorn api.index:app --host 0.0.0.0 --port 8000\"",
     "lint": "next lint"
   },
   "dependencies": {
