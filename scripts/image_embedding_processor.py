@@ -32,7 +32,7 @@ finetuned_weights_path = "/tmp/best_fine_tuned_clip_model.pth"
 # Download weights if not already downloaded
 s3_client = settings.get_s3_client()
 s3_client.download_file("glacier-ml-training", "artifacts/dev/CLIP/finetuned/best_fine_tuned_clip_model.pth", finetuned_weights_path)
-model.load_state_dict(torch.load(finetuned_weights_path, map_location=device))
+model.load_state_dict(torch.load(finetuned_weights_path, map_location=device, weights_only=True))
 
 def process_image(image_file, bucket_name, prefix, model, index, file_path, image_index, total_images, max_retries=5):
     s3_uri = f's3://{bucket_name}/{prefix}/{image_file}'

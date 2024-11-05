@@ -35,7 +35,7 @@ model, preprocess = clip.load("ViT-B/32", device=device)
 finetuned_weights_path = "/tmp/best_fine_tuned_clip_model.pth"
 s3_client = boto3.client('s3')
 s3_client.download_file("glacier-ml-training", "artifacts/dev/CLIP/finetuned/best_fine_tuned_clip_model.pth", finetuned_weights_path)
-model.load_state_dict(torch.load(finetuned_weights_path, map_location=device))
+model.load_state_dict(torch.load(finetuned_weights_path, map_location=device, weights_only=True))
 
 
 def process_video(video_file, bucket_name, prefix, model, index, video_index, total_videos):

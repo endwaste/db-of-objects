@@ -20,7 +20,7 @@ finetuned_weights_path = "/tmp/best_fine_tuned_clip_model.pth"
 # Download and load the fine-tuned weights
 s3_client = settings.get_s3_client()
 s3_client.download_file("glacier-ml-training", "artifacts/dev/CLIP/finetuned/best_fine_tuned_clip_model.pth", finetuned_weights_path)
-model.load_state_dict(torch.load(finetuned_weights_path, map_location=device))
+model.load_state_dict(torch.load(finetuned_weights_path, map_location=device, weights_only=True))
 
 def extract_frames(video_path, interval_sec=15, num_frames=8):
     """Extract frames from a video at a specified interval."""

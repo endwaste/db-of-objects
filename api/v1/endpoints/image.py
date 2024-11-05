@@ -16,7 +16,7 @@ finetuned_weights_path = "/tmp/best_fine_tuned_clip_model.pth"
 # Load the fine-tuned weights
 s3_client = settings.get_s3_client()
 s3_client.download_file("glacier-ml-training", "artifacts/dev/CLIP/finetuned/best_fine_tuned_clip_model.pth", finetuned_weights_path)
-model.load_state_dict(torch.load(finetuned_weights_path, map_location=device))
+model.load_state_dict(torch.load(finetuned_weights_path, map_location=device, weights_only=True))
 
 router = APIRouter()
 

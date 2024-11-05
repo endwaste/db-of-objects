@@ -16,9 +16,8 @@ import Footer from './components/Footer';
 import { handleFileUpload } from './components/FileUploadHandler';
 
 // Handles Python backend API URL based on the environment
-const API_URL = process.env.NODE_ENV === "production"
-  ? process.env.REACT_APP_API_URL || 'https://db-of-objects-app.herokuapp.com'
-  : 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 
 interface Result {
   score: number;

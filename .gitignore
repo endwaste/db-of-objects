@@ -1,2 +1,4 @@
-/home/barbara/glacier/layla/db-of-objects-app/.env.development
+.env.development
 node_modules/
+.next/
+**/__pycache__/
