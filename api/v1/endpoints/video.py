@@ -3,7 +3,6 @@ import base64
 import torch
 import clip
 import tempfile
-import requests
 import ffmpeg
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from api.config import settings
