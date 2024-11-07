@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.v1.endpoints import text, image, video, index
+import uvicorn
+import os
+
 
 app = FastAPI()
 
@@ -26,3 +29,7 @@ app.include_router(text.router, prefix="/api")
 app.include_router(image.router, prefix="/api")
 app.include_router(video.router, prefix="/api")
 app.include_router(index.router, prefix="/api")
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
