@@ -56,7 +56,7 @@ async def query_video(file: UploadFile = File(...)):
         
         # Process each frame with CLIP and average the embeddings
         embeddings = []
-        with torch.no_grad():
+        with torch.no_grad():  # Add no_grad here
             for frame in frames:
                 image_tensor = preprocess(frame).unsqueeze(0).to(device)
                 embedding = model.encode_image(image_tensor).cpu().numpy().flatten()
@@ -94,8 +94,8 @@ async def query_video(file: UploadFile = File(...)):
                 "interval_sec": match['metadata'].get('interval_sec'),
             }
         } for match in matches]
-        
-        os.remove(file_path)  # Clean up the temporary file
+        os.remove(file_path)
         return {"results": results}
+    
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

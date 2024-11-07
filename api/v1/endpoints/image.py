@@ -38,7 +38,7 @@ async def query_image(file: UploadFile = File(...)):
         
         # Preprocess the image and generate embeddings
         image = preprocess(Image.open(local_image_path)).unsqueeze(0).to(device)
-        with torch.no_grad():
+        with torch.no_grad():  # Add no_grad here
             embeddings = model.encode_image(image).cpu().numpy().tolist()[0]
         
         # Query Pinecone with the generated embeddings

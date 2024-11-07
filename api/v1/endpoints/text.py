@@ -4,7 +4,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from api.config import settings
 from api import deps
-import boto3
 
 router = APIRouter()
 
@@ -28,7 +27,7 @@ async def query_text(query: TextQuery):
             raise HTTPException(status_code=400, detail="The query text cannot be empty")
 
         # Generate text embedding using CLIP
-        with torch.no_grad():
+        with torch.no_grad():  # Add no_grad here
             text_tokens = clip.tokenize([query.query]).to(device)
             text_embedding = model.encode_text(text_tokens).cpu().numpy().flatten().tolist()
 
