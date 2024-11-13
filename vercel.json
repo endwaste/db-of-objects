@@ -1,0 +1,12 @@
+{
+    "version": 2,
+    "builds": [
+      {
+        "use": "@vercel/python",
+        "config": {
+          "maxLambdaSize": "450mb"
+        }
+      }
+    ]
+  }
+  
