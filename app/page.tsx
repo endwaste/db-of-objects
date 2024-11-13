@@ -23,8 +23,6 @@ const API_URL = (() => {
       return process.env.NEXT_PUBLIC_DEVELOPMENT_URL || 'http://localhost:8000';
     case "production":
       return `https://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL || ''}`;
-    case "demo":
-      return "https://shop-the-look.sample-app.pinecone.io";
     default:
       return "http://localhost:8000";
   }

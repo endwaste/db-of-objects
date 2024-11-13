@@ -1,21 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from api.v1.endpoints import text, image, video, index
-import uvicorn
-import os
-
 
 app = FastAPI()
 
+# Add a simple test route
 @app.get("/api")
 async def root():
     return {"message": "Welcome to the Universal DB of Objects API!"}
 
 # Add CORS middleware
-# CORS is important for:
-# 1. Allowing controlled cross-origin access
-# 2. Enhancing security
-# 3. Enabling API interactions across domains
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,11 +20,10 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
+# Include API routers
+print("Loading routes...")
 app.include_router(text.router, prefix="/api")
 app.include_router(image.router, prefix="/api")
 app.include_router(video.router, prefix="/api")
 app.include_router(index.router, prefix="/api")
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+print("Routes loaded.")
