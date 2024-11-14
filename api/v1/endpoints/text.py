@@ -4,18 +4,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from api.config import settings
 from api import deps
+from api.model_loader import get_model
 
 router = APIRouter()
 
-# Load the fine-tuned CLIP model
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model, _ = clip.load("ViT-B/32", device=device)
-finetuned_weights_path = "/tmp/best_fine_tuned_clip_model.pth"
+model, device, preprocess = get_model()
 
-# Download fine-tuned weights from S3 if needed
 s3_client = settings.get_s3_client()
-s3_client.download_file("glacier-ml-training", "artifacts/dev/CLIP/finetuned/best_fine_tuned_clip_model.pth", finetuned_weights_path)
-model.load_state_dict(torch.load(finetuned_weights_path, map_location=device, weights_only=True))
 
 class TextQuery(BaseModel):
     query: str

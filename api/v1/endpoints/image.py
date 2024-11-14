@@ -7,18 +7,13 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from api.config import settings
 from api import deps
 import tempfile
+from api.model_loader import get_model
 
-# Load the CLIP model and configure the device
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model, preprocess = clip.load("ViT-B/32", device=device)
-finetuned_weights_path = "/tmp/best_fine_tuned_clip_model.pth"
-
-# Load the fine-tuned weights
-s3_client = settings.get_s3_client()
-s3_client.download_file("glacier-ml-training", "artifacts/dev/CLIP/finetuned/best_fine_tuned_clip_model.pth", finetuned_weights_path)
-model.load_state_dict(torch.load(finetuned_weights_path, map_location=device, weights_only=True))
+model, device, preprocess = get_model()
 
 router = APIRouter()
+
+s3_client = settings.get_s3_client()
 
 @router.post("/search/image")
 async def query_image(file: UploadFile = File(...)):

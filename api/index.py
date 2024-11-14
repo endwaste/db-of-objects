@@ -21,9 +21,7 @@ app.add_middleware(
 )
 
 # Include API routers
-print("Loading routes...")
 app.include_router(text.router, prefix="/api")
 app.include_router(image.router, prefix="/api")
 app.include_router(video.router, prefix="/api")
 app.include_router(index.router, prefix="/api")
-print("Routes loaded.")
