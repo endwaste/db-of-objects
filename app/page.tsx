@@ -26,7 +26,7 @@ const API_URL = (() => {
     case "development":
       return process.env.NEXT_PUBLIC_DEVELOPMENT_URL || 'http://localhost:8000';
     case "production":
-      return `https://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL || ''}`;
+      return process.env.PRODUCTION_URL;
     default:
       return "http://localhost:8000";
   }
