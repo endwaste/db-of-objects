@@ -10,7 +10,7 @@ pinecone_api_key = os.getenv("PINECONE_API_KEY")
 
 pc = Pinecone(api_key=pinecone_api_key)
 
-index_name = "db-of-objects"
+index_name = "db-of-objects-vitb32"
 # Delete all vectors in the index
 index = pc.Index(index_name)
 index.delete(delete_all=True)
