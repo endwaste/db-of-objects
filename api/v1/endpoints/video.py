@@ -67,26 +67,33 @@ async def query_video(file: UploadFile = File(...)):
         
         s3_client = settings.get_s3_client()
         matches = query_response['matches']
-        
-        # Prepare results with presigned URLs
-        results = [{
-            "score": match['score'],
-            "metadata": {
-                "date_added": match['metadata'].get('date_added'),
-                "file_type": match['metadata'].get('file_type'),
-                "s3_file_name": match['metadata'].get('s3_file_name'),
-                "s3_file_path": match['metadata'].get('s3_file_path'),
-                "s3_presigned_url": s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': settings.s3_bucket_name, 'Key': match['metadata'].get('s3_file_path').replace('s3://glacier-ml-training/', '')},
-                    ExpiresIn=3600
-                ),
-                "segment": match['metadata'].get('segment'),
-                "start_offset_sec": match['metadata'].get('start_offset_sec'),
-                "end_offset_sec": match['metadata'].get('end_offset_sec'),
-                "interval_sec": match['metadata'].get('interval_sec'),
-            }
-        } for match in matches]
+
+        s3_file_path = matches[0]['metadata'].get('s3_file_path')
+        results = []
+        for match in matches:
+            s3_file_path = match['metadata'].get('s3_file_path')
+            s3_file_name = match['metadata'].get('s3_file_name')
+            path_without_prefix = s3_file_path[5:]
+            bucket_name, key = path_without_prefix.split('/', 1)
+            presigned_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket_name, 'Key': key},
+                ExpiresIn=3600
+            )
+            results.append({
+                "score": match['score'],
+                "metadata": {
+                    "date_added": match['metadata'].get('date_added'),
+                    "file_type": match['metadata'].get('file_type'),
+                    "s3_file_name": s3_file_name,
+                    "s3_file_path": s3_file_path,
+                    "s3_presigned_url": presigned_url,
+                    "segment": match['metadata'].get('segment'),
+                    "start_offset_sec": match['metadata'].get('start_offset_sec'),
+                    "end_offset_sec": match['metadata'].get('end_offset_sec'),
+                    "interval_sec": match['metadata'].get('interval_sec'),
+                }
+            })
         os.remove(file_path)
         return {"results": results}
     

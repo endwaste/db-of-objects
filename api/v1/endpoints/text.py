@@ -39,9 +39,11 @@ async def query_text(query: TextQuery):
         for match in matches:
             s3_file_path = match['metadata'].get('s3_file_path')
             s3_file_name = match['metadata'].get('s3_file_name')
+            path_without_prefix = s3_file_path[5:]
+            bucket_name, key = path_without_prefix.split('/', 1)
             presigned_url = s3_client.generate_presigned_url(
                 'get_object',
-                Params={'Bucket': settings.s3_bucket_name, 'Key': s3_file_path.replace('s3://glacier-ml-training/', '')},
+                Params={'Bucket': bucket_name, 'Key': key},
                 ExpiresIn=3600
             )
             results.append({
