@@ -1,4 +1,22 @@
+import React from 'react';
 import { MagnifyingGlassIcon, PhotoFrameIcon } from './Icons';
+
+// Define props
+type SearchFormProps = {
+  query: string;
+  handleInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  handleSubmit: (event: React.FormEvent) => void;
+  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  isInputEmpty: boolean;
+  isUploading: boolean;
+  isSearching: boolean;
+  clearResults: () => void;
+  suggestions: string[];
+  handleSuggestionClick: (suggestion: string) => void;
+  showSuggestions: boolean;
+  handleFocus: () => void;
+  openModal: () => void;
+};
 
 const SearchForm: React.FC<SearchFormProps> = ({
   query,
