@@ -209,7 +209,7 @@ export default function Home() {
     setErrorMessage(null);
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (isInputEmpty) return;
 
@@ -354,7 +354,9 @@ export default function Home() {
                 selectedClass={selectedClass}
                 onClassChange={handleClassChange}
                 availableClasses={Array.from(
-                  new Set(results.map((result) => result.metadata.class))
+                  new Set(
+                    results.map((result) => result.metadata.class).filter((cls): cls is string => cls !== undefined)
+                  )
                 )}
               />
             </div>
