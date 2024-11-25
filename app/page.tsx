@@ -209,7 +209,7 @@ export default function Home() {
     setErrorMessage(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
     if (isInputEmpty) return;
 

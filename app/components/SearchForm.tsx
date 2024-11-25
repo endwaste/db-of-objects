@@ -5,7 +5,7 @@ import { MagnifyingGlassIcon, PhotoFrameIcon } from './Icons';
 type SearchFormProps = {
   query: string;
   handleInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleSubmit: (event: React.FormEvent<HTMLFormElement>) => Promise<void>; // Updated type
+  handleSubmit: (event: React.FormEvent<HTMLFormElement>) => void; // Explicit type
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   isInputEmpty: boolean;
   isUploading: boolean;
@@ -17,6 +17,7 @@ type SearchFormProps = {
   handleFocus: () => void;
   openModal: () => void;
 };
+
 
 
 const SearchForm: React.FC<SearchFormProps> = ({
