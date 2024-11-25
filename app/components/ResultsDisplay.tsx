@@ -1,19 +1,28 @@
 import React from 'react';
-import { QuestionMarkCircleIcon } from './Icons';
 
 interface Result {
   score: number;
   metadata: {
-    class: string;
-    date_added: string;
-    s3_file_name: string;
-    s3_file_path: string;
+    class?: string;
+    date_added?: string;
+    s3_file_name?: string;
+    s3_file_path?: string;
     s3_presigned_url: string;
     file_type: 'image' | 'video' | 'text';
-    start_offset_sec: number;
-    end_offset_sec: number;
-    interval_sec: number;
-    segment: number;
+    start_offset_sec?: number;
+    end_offset_sec?: number;
+    interval_sec?: number;
+    segment?: number;
+    brand?: string;
+    color?: string;
+    coordinates?: string;
+    datetime_taken?: string;
+    embedding_id?: string;
+    material?: string;
+    original_s3_uri?: string;
+    robot?: string;
+    shape?: string;
+    timestamp?: string;
   };
 }
 
@@ -47,32 +56,44 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
             {results.map((result, index) => {
               const { score } = getScoreLabel(result.score);
               const videoId = getVideoId(result, index);
+
               return (
                 <div key={videoId}>
+                  {/* Image or video */}
                   {result.metadata.file_type === 'image' ? (
                     <img
                       src={result.metadata.s3_presigned_url}
                       alt="Result"
-                      className="w-full h-auto object-cover mt-2 rounded hover-shadow"
+                      className="w-full h-auto object-cover mt-2 rounded"
                     />
                   ) : (
-                    <div className="video-container mt-2 rounded hover-shadow">
+                    <div className="video-container mt-2 rounded">
                       <video id={videoId} className="video-js vjs-default">
                         <source src={result.metadata.s3_presigned_url} type="video/mp4" />
                         Your browser does not support the video tag.
                       </video>
                     </div>
                   )}
-                  <div className="inline-block mt-2 mb-2 px-1 py-1 text-sm text-gray-400 flex items-center">
-                    Similarity score: {score}.
-                    <div className="relative ml-1 group">
-                      <QuestionMarkCircleIcon className="h-4 w-4 text-gray-400" />
-                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-500 text-white text-xs rounded py-1 px-2 hidden group-hover:block whitespace-nowrap">
-                        Cosine similarity score between 0 - 1, higher is more similar.
-                        <a href="https://www.pinecone.io/learn/vector-similarity?utm_source=shop-the-look&utm_medium=referral)" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200"> About vector similarity.</a>
-                      </div>
-                    </div>
+
+                  {/* Metadata Box with Similarity Score */}
+                  <div className="mt-1 p-2 bg-gray-100 text-gray-800 text-xs rounded shadow break-words">
+                    {Object.entries(result.metadata).map(([key, value]) => {
+                      // Exclude 'file_type' and 's3_presigned_url' from being displayed
+                      if (value && key !== 'file_type' && key !== 's3_presigned_url' && key !== 's3_file_name') {
+                        return (
+                          <p key={key}>
+                            <strong>{key.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}:</strong> {value}
+                          </p>
+                        );
+                      }
+                      return null;
+                    })}
+                    <p>
+                      <strong>Similarity Score:</strong> {score}
+                    </p>
                   </div>
+
+
                 </div>
               );
             })}

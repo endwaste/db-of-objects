@@ -1,26 +1,28 @@
 "use client";
+
+
+import React, { useState } from 'react';
 import ClassFilter from './components/ClassFilter';
 import Header from './components/Header';
-import SearchForm from './components/SearchForm';
 import ResultsDisplay from './components/ResultsDisplay';
+import SearchForm from './components/SearchForm';
+import UploadModal from './components/UploadModal';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { track } from '@vercel/analytics';
 import axios from 'axios';
+import Head from 'next/head';
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef } from 'react';
 import videojs from 'video.js';
 import type VideoJsPlayer from 'video.js/dist/types/player';
 import 'video.js/dist/video-js.css';
 import Layout from './layout';
 import './styles.css';
-import { track } from '@vercel/analytics';
-import Head from 'next/head';
 
 // Components
-import { PhotoFrameIcon, MagnifyingGlassIcon, QuestionMarkCircleIcon } from './components/Icons';
-import Footer from './components/Footer';
 import { handleFileUpload } from './components/FileUploadHandler';
+import Footer from './components/Footer';
 
-// Handles Python backend API URL based on the environment
-// Handles Python backend API URL based on the environment
 const API_URL = (() => {
   switch (process.env.NEXT_PUBLIC_VERCEL_ENV) {
     case "development":
@@ -35,16 +37,26 @@ const API_URL = (() => {
 interface Result {
   score: number;
   metadata: {
-    class: string;
-    date_added: string;
-    s3_file_name: string;
-    s3_file_path: string;
+    class?: string;
+    date_added?: string;
+    s3_file_name?: string;
+    s3_file_path?: string;
     s3_presigned_url: string;
     file_type: 'image' | 'video' | 'text';
-    start_offset_sec: number;
-    end_offset_sec: number;
-    interval_sec: number;
-    segment: number;
+    start_offset_sec?: number;
+    end_offset_sec?: number;
+    interval_sec?: number;
+    segment?: number;
+    brand?: string;
+    color?: string;
+    coordinates?: string;
+    datetime_taken?: string;
+    embedding_id?: string;
+    material?: string;
+    original_s3_uri?: string;
+    robot?: string;
+    shape?: string;
+    timestamp?: string;
   };
 }
 
@@ -66,9 +78,11 @@ export default function Home() {
   const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedClass(e.target.value);
   };
+  const router = useRouter();
+
   const filteredResults = selectedClass
-  ? results.filter(result => result.metadata.class === selectedClass)
-  : results;
+    ? results.filter(result => result.metadata.class === selectedClass)
+    : results;
   const suggestions = [
     "red coke can",
     "green plastic",
@@ -92,9 +106,12 @@ export default function Home() {
 
   const playersRef = useRef<{ [key: string]: VideoJsPlayer }>({});
 
-  const VerticalDivider = () => (
-    <div className="h-6 w-px bg-gray-200"></div>
-  );
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const openModal = () => setIsModalOpen(true);
+  const closeModal = () => setIsModalOpen(false);
+
+
 
   useEffect(() => {
     let scrollTracked = false;
@@ -310,9 +327,14 @@ export default function Home() {
         style={{ fontFamily: "'Inter', 'Helvetica', 'Arial', sans-serif" }}
       >
         <div className="max-w-6xl w-full px-4 md:px-0 mt-12">
-          <Header /> 
-          <div className="max-w-xl mx-auto relative">
-          <SearchForm
+          <Header />
+
+
+
+          <div className="max-w-xl mx-auto relative ">
+            
+            
+            <SearchForm
               query={query}
               handleInputChange={handleInputChange}
               handleSubmit={handleSubmit}
@@ -321,16 +343,19 @@ export default function Home() {
               isUploading={isUploading}
               isSearching={isSearching}
               clearResults={clearResults}
-              suggestions={suggestions} // Pass full suggestions list
+              suggestions={suggestions}
               handleSuggestionClick={handleSuggestionClick}
-              showSuggestions={showSuggestions} // Pass state to control visibility
-              handleFocus={handleFocus} // Add focus handler
+              showSuggestions={showSuggestions}
+              handleFocus={handleFocus}
+              openModal={openModal}
             />
             <div className="mt-4">
               <ClassFilter
                 selectedClass={selectedClass}
                 onClassChange={handleClassChange}
-                availableClasses={Array.from(new Set(results.map(result => result.metadata.class)))}
+                availableClasses={Array.from(
+                  new Set(results.map((result) => result.metadata.class))
+                )}
               />
             </div>
 
@@ -342,7 +367,9 @@ export default function Home() {
             {(isUploading || isSearching) && (
               <div className="w-full mt-8 flex items-center justify-center">
                 <span className="text-gray-500 pulse">
-                  {isUploading ? "Uploading, embedding, and searching..." : "Searching..."}
+                  {isUploading
+                    ? 'Uploading, embedding, and searching...'
+                    : 'Searching...'}
                 </span>
                 <div className="ml-3 spinner border-4 border-t-transparent border-indigo-300 rounded-full w-6 h-6 animate-spin"></div>
               </div>
@@ -353,9 +380,26 @@ export default function Home() {
               <div className="ml-1 mt-6 mb-2 flex items-center text-left text-gray-700">
                 <p>
                   Searched {totalVectors.toLocaleString()} objects
-                  {searchType === 'text' && <> for <strong className="text-indigo-800">{query}</strong></>}
-                  {searchType === 'image' && <> for <strong className="text-indigo-800">your image</strong></>}
-                  {searchType === 'video' && <> for <strong className="text-indigo-800">your video</strong></>}
+                  {searchType === 'text' && (
+                    <>
+                      {' '}
+                      for <strong className="text-indigo-800">{query}</strong>
+                    </>
+                  )}
+                  {searchType === 'image' && (
+                    <>
+                      {' '}
+                      for{' '}
+                      <strong className="text-indigo-800">your image</strong>
+                    </>
+                  )}
+                  {searchType === 'video' && (
+                    <>
+                      {' '}
+                      for{' '}
+                      <strong className="text-indigo-800">your video</strong>
+                    </>
+                  )}
                 </p>
                 <button
                   type="button"
@@ -387,11 +431,20 @@ export default function Home() {
               getScoreLabel={getScoreLabel}
               getVideoId={getVideoId}
             />
-
           </div>
         </div>
+
+        {/* Include UploadModal */}
+        <UploadModal
+          isOpen={isModalOpen} // Controlled visibility
+          onClose={closeModal} // Close handler
+          apiUrl={`${API_URL}/api/new`} // Pass API URL to the modal
+        />
+
+
         <Footer />
       </div>
     </Layout>
   );
+
 }

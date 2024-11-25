@@ -5,10 +5,10 @@ Pillow
 torch==2.5.1
 torchvision==0.20.1
 boto3
-pinecone-client==4.1.0 
+pinecone-client==4.1.0
 openai-clip
 ffmpeg
 uvicorn[standard]
-
+piexif
 
 
