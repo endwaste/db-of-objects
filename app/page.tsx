@@ -209,7 +209,7 @@ export default function Home() {
     setErrorMessage(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (isInputEmpty) return;
 
@@ -332,8 +332,8 @@ export default function Home() {
 
 
           <div className="max-w-xl mx-auto relative ">
-            
-            
+
+
             <SearchForm
               query={query}
               handleInputChange={handleInputChange}
