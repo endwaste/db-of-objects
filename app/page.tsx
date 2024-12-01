@@ -64,6 +64,7 @@ export default function Home() {
   const [query, setQuery] = useState<string>('');
   const [results, setResults] = useState<Result[]>([]);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [dragging, setDragging] = useState<boolean>(false);
   const [totalVectors, setTotalVectors] = useState<number | null>(null);
@@ -377,6 +378,19 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {/* Display Upload Status Outside Modal */}
+          {uploadStatus && (
+            <div
+              className={`mt-4 p-2 rounded ${uploadStatus.includes("successful")
+                ? "bg-green-100 text-green-800"
+                : "bg-red-100 text-red-800"
+                }`}
+            >
+              {uploadStatus}
+            </div>
+          )}
+
           <div>
             {isSearchComplete && searchTime !== null && totalVectors !== null && (
               <div className="ml-1 mt-6 mb-2 flex items-center text-left text-gray-700">
@@ -438,9 +452,10 @@ export default function Home() {
 
         {/* Include UploadModal */}
         <UploadModal
-          isOpen={isModalOpen} // Controlled visibility
-          onClose={closeModal} // Close handler
-          apiUrl={`${API_URL}/api/new`} // Pass API URL to the modal
+          isOpen={isModalOpen}
+          onClose={closeModal}
+          apiUrl={`${API_URL}/api/new`}
+          setUploadStatus={setUploadStatus} // Pass setUploadStatus to the modal
         />
 
 

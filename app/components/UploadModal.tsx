@@ -1,28 +1,54 @@
 "use client";
 
 import axios from "axios";
-import { useRouter } from "next/navigation";
 import React, { useState } from "react";
 
-interface Metadata {
-    color?: string;
-    material?: string;
-    brand?: string;
-    shape?: string;
-}
+import brandOptions from "@/app/constants/brandOptions";
+import colorOptions from "@/app/constants/colorOptions";
+import materialOptions from "@/app/constants/materialOptions";
+import shapeOptions from "@/app/constants/shapeOptions";
 
 interface UploadModalProps {
     isOpen: boolean;
     onClose: () => void;
-    apiUrl: string; // API endpoint URL
+    apiUrl: string;
+    setUploadStatus: (status: string | null) => void; // Pass the status setter
 }
 
-const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, apiUrl }) => {
+const UploadModal: React.FC<UploadModalProps> = ({
+    isOpen,
+    onClose,
+    apiUrl,
+    setUploadStatus,
+}) => {
+    const [metadata, setMetadata] = useState<{
+        brand?: string;
+        color?: string;
+        material?: string;
+        shape?: string;
+    }>({});
     const [file, setFile] = useState<File | null>(null);
-    const [metadata, setMetadata] = useState<Metadata>({});
     const [isUploading, setIsUploading] = useState(false);
-    const [uploadStatus, setUploadStatus] = useState<string | null>(null);
-    const router = useRouter(); // For navigation
+    const [isCustomBrand, setIsCustomBrand] = useState(false);
+    const [uploadResult, setUploadResult] = useState<any>(null); // For upload response
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+
+    const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const value = e.target.value;
+
+        if (value === "Other") {
+            setIsCustomBrand(true); // Show the custom input field
+            setMetadata({ ...metadata, brand: "" }); // Clear brand
+        } else {
+            setIsCustomBrand(false); // Hide the custom input field
+            setMetadata({ ...metadata, brand: value }); // Save the selected brand
+        }
+    };
+
+    const handleCustomBrandChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setMetadata({ ...metadata, brand: e.target.value }); // Save custom brand
+    };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -30,17 +56,18 @@ const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, apiUrl }) =>
         }
     };
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setMetadata({ ...metadata, [e.target.name]: e.target.value });
     };
 
     const handleSubmit = async () => {
         if (!file) {
-            setUploadStatus("Please select a file to upload.");
+            setErrorMessage("Please select a file to upload.");
             return;
         }
 
         setIsUploading(true);
+        setErrorMessage(null); // Clear previous errors
         setUploadStatus(null);
 
         const formData = new FormData();
@@ -50,119 +77,190 @@ const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, apiUrl }) =>
         });
 
         try {
-            await axios.post(apiUrl, formData, {
+            const response = await axios.post(apiUrl, formData, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
-            setUploadStatus("Upload successful!");
+            // Store the response data (including presigned_url and metadata)
+            setUploadResult(response.data.metadata);
 
-            // Close modal and redirect to root
-            onClose();
-            router.push("/"); // Redirect to the root page
         } catch (error) {
             console.error("Upload error:", error);
-            setUploadStatus("Upload failed. Please try again.");
+            setErrorMessage("Upload failed. Please try again.");
         } finally {
             setIsUploading(false);
         }
     };
 
+
+    const handleClose = () => {
+        // Reset all states to their initial values
+        setMetadata({
+            brand: "",
+            color: "",
+            material: "",
+            shape: "",
+        });
+        setFile(null); // Clear the selected file
+        setErrorMessage(null);
+        setUploadResult(null); // Clear the upload result summary
+        setIsCustomBrand(false); // Reset custom brand input visibility
+        onClose(); // Call the parent-provided onClose handler to close the modal
+    };
+
+
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white w-96 rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-semibold mb-4">Upload New Image</h2>
+            <div className="bg-white w-96 rounded-lg shadow-lg p-6 relative">
+                {/* Close Button */}
+                <button
+                    className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 focus:outline-none"
+                    onClick={handleClose}
+                >
+                    &times;
+                </button>
 
-                <label className="block mb-2 text-sm font-medium text-gray-700">
-                    Select Image
-                </label>
-                <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
+                {/* Conditional Rendering */}
+                {!uploadResult ? (
+                    /* Render Upload Form */
+                    <>
+                        <h2 className="text-xl font-semibold mb-4">Upload New Image</h2>
 
-                <div className="mt-4">
-                    <label className="block mb-2 text-sm font-medium text-gray-700">
-                        Color
-                    </label>
-                    <input
-                        type="text"
-                        name="color"
-                        placeholder="Enter color"
-                        onChange={handleInputChange}
-                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-                    />
-                </div>
+                        {/* File Input */}
+                        <label className="block mb-2 text-sm font-medium text-gray-700">Select Image</label>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileChange}
+                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        />
 
-                <div className="mt-4">
-                    <label className="block mb-2 text-sm font-medium text-gray-700">
-                        Material
-                    </label>
-                    <input
-                        type="text"
-                        name="material"
-                        placeholder="Enter material"
-                        onChange={handleInputChange}
-                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-                    />
-                </div>
+                        {/* Dropdowns */}
+                        <div className="mt-4">
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Color</label>
+                            <select
+                                name="color"
+                                value={metadata.color || ""}
+                                onChange={handleInputChange}
+                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            >
+                                <option value="" disabled>Select a color</option>
+                                {colorOptions.map((color) => (
+                                    <option key={color.value} value={color.value}>
+                                        {color.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
-                <div className="mt-4">
-                    <label className="block mb-2 text-sm font-medium text-gray-700">
-                        Brand
-                    </label>
-                    <input
-                        type="text"
-                        name="brand"
-                        placeholder="Enter brand"
-                        onChange={handleInputChange}
-                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-                    />
-                </div>
+                        <div className="mt-4">
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Material</label>
+                            <select
+                                name="material"
+                                value={metadata.material || ""}
+                                onChange={handleInputChange}
+                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            >
+                                <option value="" disabled>Select a material</option>
+                                {materialOptions.map((material) => (
+                                    <option key={material.value} value={material.value}>
+                                        {material.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
-                <div className="mt-4">
-                    <label className="block mb-2 text-sm font-medium text-gray-700">
-                        Shape
-                    </label>
-                    <input
-                        type="text"
-                        name="shape"
-                        placeholder="Enter shape"
-                        onChange={handleInputChange}
-                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-                    />
-                </div>
+                        <div className="mt-4">
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Brand</label>
+                            <select
+                                name="brand"
+                                value={isCustomBrand ? "Other" : metadata.brand || ""}
+                                onChange={handleBrandChange}
+                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            >
+                                <option value="" disabled>Select a brand</option>
+                                {brandOptions.map((brand) => (
+                                    <option key={brand.value} value={brand.value}>
+                                        {brand.label}
+                                    </option>
+                                ))}
+                            </select>
+                            {isCustomBrand && (
+                                <input
+                                    type="text"
+                                    name="brand"
+                                    placeholder="Enter custom brand"
+                                    value={metadata.brand || ""}
+                                    onChange={handleCustomBrandChange}
+                                    className="block w-full mt-2 p-2 border border-gray-300 rounded-md shadow-sm"
+                                />
+                            )}
+                        </div>
 
-                {uploadStatus && (
-                    <div
-                        className={`mt-4 p-2 rounded ${uploadStatus.includes("successful")
-                                ? "bg-green-100 text-green-800"
-                                : "bg-red-100 text-red-800"
-                            }`}
-                    >
-                        {uploadStatus}
-                    </div>
+                        <div className="mt-4">
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Shape</label>
+                            <select
+                                name="shape"
+                                value={metadata.shape || ""}
+                                onChange={handleInputChange}
+                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            >
+                                <option value="" disabled>Select a shape</option>
+                                {shapeOptions.map((shape) => (
+                                    <option key={shape.value} value={shape.value}>
+                                        {shape.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="mt-6 flex justify-end space-x-4">
+                            {errorMessage && (
+                                <div className="mt-4 text-sm text-red-500">
+                                    {errorMessage}
+                                </div>
+                            )}
+                            <button
+                                onClick={handleClose}
+                                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSubmit}
+                                disabled={isUploading}
+                                className={`px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 ${isUploading ? "opacity-50 cursor-not-allowed" : ""
+                                    }`}
+                            >
+                                {isUploading ? "Uploading..." : "Upload"}
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    /* Render Upload Summary */
+                    <>
+                        <h2 className="text-xl font-semibold mb-4">Upload Summary</h2>
+                        {/* Display Uploaded Image */}
+                        <img
+                            src={uploadResult.presigned_url}
+                            alt="Uploaded"
+                            className="w-full h-auto mb-4 rounded"
+                        />
+
+                        {/* Display Metadata */}
+                        <div className="text-sm text-gray-700 space-y-2">
+                            <p><strong>Color:</strong> {uploadResult.color || "N/A"}</p>
+                            <p><strong>Material:</strong> {uploadResult.material || "N/A"}</p>
+                            <p><strong>Brand:</strong> {uploadResult.brand || "N/A"}</p>
+                            <p><strong>Shape:</strong> {uploadResult.shape || "N/A"}</p>
+                            <p><strong>Timestamp:</strong> {uploadResult.timestamp || "N/A"}</p>
+                            <p><strong>Robot:</strong> {uploadResult.robot || "N/A"}</p>
+                            <p><strong>Date Taken:</strong> {uploadResult.datetime_taken || "N/A"}</p>
+                        </div>
+                    </>
                 )}
-
-                <div className="mt-6 flex justify-end space-x-4">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSubmit}
-                        className={`px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 ${isUploading ? "opacity-50 cursor-not-allowed" : ""
-                            }`}
-                        disabled={isUploading}
-                    >
-                        {isUploading ? "Uploading..." : "Upload"}
-                    </button>
-                </div>
             </div>
         </div>
     );

@@ -20,10 +20,7 @@ import ast
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-api_key = os.getenv("PINECONE_API_KEY")
-pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
-pc = Pinecone(api_key=api_key, source_tag="pinecone:stl_sample_app")
-index = pc.Index(pinecone_index_name)
+index = settings.get_pinecone_index()
 
 router = APIRouter()
 
@@ -57,6 +54,26 @@ async def add_new_data(
         original_s3_uri = extracted_metadata.get("original_s3_uri") or original_s3_uri
         s3_file_path = extracted_metadata.get("s3_file_path") or s3_file_path
         coordinates = extracted_metadata.get("coordinates") or coordinates
+
+        path_without_prefix = s3_file_path[5:]
+        bucket_name, key = path_without_prefix.split("/", 1)
+
+        region_name = (
+            "us-east-1"
+            if bucket_name == "glacier-ml-training"
+            else (
+                "us-west-2"
+                if bucket_name == "scanner-data.us-west-2"
+                else settings.default_region
+            )
+        )
+
+        s3_client = settings.get_s3_client(region_name=region_name)
+        presigned_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket_name, "Key": key},
+            ExpiresIn=3600,
+        )
 
         if not original_s3_uri:
             logger.error("original_s3_uri is missing.")
@@ -131,6 +148,8 @@ async def add_new_data(
         }
         save_to_pinecone(image_embeddings, metadata)
         append_metadata_to_s3(metadata)
+
+        metadata["presigned_url"] = presigned_url
 
         return {
             "status": "success",
