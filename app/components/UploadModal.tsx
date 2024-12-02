@@ -1,6 +1,7 @@
 "use client";
 
 import axios from "axios";
+import Image from "next/image";
 import React, { useState } from "react";
 
 import brandOptions from "@/app/constants/brandOptions";
@@ -156,7 +157,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                         {imageUrl && (
                             <div className="mt-4">
                                 <h3 className="text-sm font-medium text-gray-700">Image Preview</h3>
-                                <img src={imageUrl} alt="Preview" className="w-48 h-auto mt-2 rounded-lg" />
+                                <Image src={imageUrl} alt="Preview" className="w-48 h-auto mt-2 rounded-lg" />
                             </div>
                         )}
 
@@ -279,7 +280,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                     <>
                         <h2 className="text-xl font-semibold mb-4">Upload Summary</h2>
                         {/* Display Uploaded Image */}
-                        <img
+                        <Image
                             src={uploadResult.presigned_url}
                             alt="Uploaded"
                             className="w-full h-auto mb-4 rounded"

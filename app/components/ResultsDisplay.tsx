@@ -1,3 +1,4 @@
+import Image from "next/image";
 import React from 'react';
 
 interface Result {
@@ -62,7 +63,7 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                 <div key={videoId}>
                   {/* Image or video */}
                   {result.metadata.file_type === 'image' ? (
-                    <img
+                    <Image
                       src={result.metadata.s3_presigned_url}
                       alt="Result"
                       className="w-full h-auto object-cover mt-2 rounded"
