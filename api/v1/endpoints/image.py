@@ -90,6 +90,7 @@ async def query_image(file: UploadFile = File(...)):
                         "original_s3_uri": metadata.get("original_s3_uri"),
                         "robot": metadata.get("robot"),
                         "shape": metadata.get("shape"),
+                        "comment": metadata.get("comment"),
                         "timestamp": metadata.get("timestamp"),
                     },
                 }

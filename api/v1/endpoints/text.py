@@ -23,14 +23,12 @@ async def query_text(query: TextQuery):
                 status_code=400, detail="The query text cannot be empty"
             )
 
-        # Generate text embedding using CLIP
-        with torch.no_grad():  # Add no_grad here
+        with torch.no_grad():
             text_tokens = clip.tokenize([query.query]).to(device)
             text_embedding = (
                 model.encode_text(text_tokens).cpu().numpy().flatten().tolist()
             )
 
-        # Query Pinecone with the generated embedding
         query_response = deps.index.query(
             vector=text_embedding, top_k=settings.k, include_metadata=True
         )
@@ -80,6 +78,7 @@ async def query_text(query: TextQuery):
                         "original_s3_uri": metadata.get("original_s3_uri"),
                         "robot": metadata.get("robot"),
                         "shape": metadata.get("shape"),
+                        "comment": metadata.get("comment"),
                         "timestamp": metadata.get("timestamp"),
                     },
                 }

@@ -14,6 +14,7 @@ router = APIRouter()
 
 model, device, preprocess = get_model()
 
+
 def extract_frames(video_path, interval_sec=15, num_frames=8):
     """Extract frames from a video at a specified interval."""
     probe = ffmpeg.probe(video_path)

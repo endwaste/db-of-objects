@@ -37,6 +37,7 @@ async def add_new_data(
     original_s3_uri: Optional[str] = Form(None),
     s3_file_path: Optional[str] = Form(None),
     coordinates: Optional[Union[List[float], str]] = Form(None),
+    comment: Optional[str] = Form(None),
 ):
     """
     Add new data to Pinecone and update metadata CSV in S3.
@@ -114,7 +115,6 @@ async def add_new_data(
             f"Metadata extracted from S3 URI: robot={robot}, datetime_taken={datetime_taken}"
         )
 
-        # Step 5: Check for Duplicates
         duplicate_metadata = {
             "color": color,
             "material": material,
@@ -128,7 +128,6 @@ async def add_new_data(
                 status_code=400, detail="Duplicate entry detected. Entry not added."
             )
 
-        # Step 7: Save Metadata
         metadata = {
             "embedding_id": str(uuid.uuid4()),
             "color": color,
@@ -142,6 +141,7 @@ async def add_new_data(
             "robot": robot,
             "datetime_taken": datetime_taken,
             "file_type": "image",
+            "comment": comment,
         }
         metadata = {
             key: (value if value is not None else "") for key, value in metadata.items()
@@ -181,20 +181,16 @@ def extract_metadata_from_user_comment(image_contents: bytes) -> dict:
     """
     try:
         with Image.open(io.BytesIO(image_contents)) as img:
-            # Load EXIF data
             exif_data = piexif.load(img.info.get("exif", b""))
 
-            # Retrieve the UserComment field
             user_comment = exif_data["Exif"].get(piexif.ExifIFD.UserComment, b"")
 
             if not user_comment:
                 logger.warning("No UserComment field found in the image metadata.")
                 return {}
 
-            # Decode the UserComment field into a string
             extracted_metadata = piexif.helper.UserComment.load(user_comment)
 
-            # Safely evaluate the string into a dictionary
             metadata_dict = ast.literal_eval(extracted_metadata)
             return metadata_dict
 
@@ -295,21 +291,16 @@ async def generate_image_embeddings(image_contents: bytes):
         list: Generated embeddings.
     """
     try:
-        # Save the bytes to a BytesIO buffer to ensure the image is properly read
         with io.BytesIO(image_contents) as buffer:
-            # Open the image from the buffer
             with Image.open(buffer) as img:
-                img.verify()  # Ensure the image is valid
+                img.verify()
                 logger.info("Image verified successfully.")
 
-                # Reset the buffer pointer and reload the image
                 buffer.seek(0)
                 img = Image.open(buffer)
 
-                # Preprocess the image for the model
                 processed_image = preprocess(img).unsqueeze(0).to(device)
 
-        # Generate embeddings
         with torch.no_grad():
             embeddings = model.encode_image(processed_image).cpu().numpy().tolist()[0]
 
@@ -374,7 +365,6 @@ def append_metadata_to_s3(metadata: dict) -> None:
     csv_key = "universal-db/metadata.csv"
 
     try:
-        # Check if the file exists in the bucket
         logger.info(
             f"Checking if the CSV exists in S3: bucket={bucket_name}, key={csv_key}"
         )
@@ -382,17 +372,14 @@ def append_metadata_to_s3(metadata: dict) -> None:
         file_exists = "Contents" in response
         logger.info(f"File exists in S3: {file_exists}")
 
-        # Create a temporary file to hold the CSV data
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             temp_file_name = temp_file.name
 
             if file_exists:
-                # Download the existing CSV
                 logger.info(f"Downloading existing CSV from S3: {csv_key}")
                 s3_client.download_file(bucket_name, csv_key, temp_file_name)
                 logger.info("Existing CSV downloaded successfully.")
             else:
-                # If the CSV does not exist, create a new one
                 logger.warning("CSV does not exist. Creating a new one with headers.")
                 with open(temp_file_name, "w", newline="") as f:
                     writer = csv.writer(f)
@@ -409,6 +396,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
                             "timestamp",
                             "robot",
                             "datetime_taken",
+                            "comment",
                             "status",
                         ]
                     )
@@ -428,6 +416,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
                         metadata.get("timestamp", ""),
                         metadata.get("robot", ""),
                         metadata.get("datetime_taken", ""),
+                        metadata.get("comment", ""),
                         metadata.get("status", ""),
                     ]
                 )

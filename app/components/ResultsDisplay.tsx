@@ -22,6 +22,7 @@ interface Result {
     original_s3_uri?: string;
     robot?: string;
     shape?: string;
+    comment?: string;
     timestamp?: string;
   };
 }
@@ -78,7 +79,6 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                   {/* Metadata Box with Similarity Score */}
                   <div className="mt-1 p-2 bg-gray-100 text-gray-800 text-xs rounded shadow break-words">
                     {Object.entries(result.metadata).map(([key, value]) => {
-                      // Exclude 'file_type' and 's3_presigned_url' from being displayed
                       if (value && key !== 'file_type' && key !== 's3_presigned_url' && key !== 's3_file_name') {
                         return (
                           <p key={key}>

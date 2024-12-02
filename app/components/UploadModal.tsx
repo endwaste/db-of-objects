@@ -26,6 +26,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
         color?: string;
         material?: string;
         shape?: string;
+        comment?: string;
     }>({});
     const [file, setFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -114,6 +115,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
             color: "",
             material: "",
             shape: "",
+            comment: "",
         });
         setFile(null);
         setImageUrl(null);
@@ -237,6 +239,19 @@ const UploadModal: React.FC<UploadModalProps> = ({
                             </select>
                         </div>
 
+                        <div className="mt-4">
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Comment</label>
+                            <input
+                                type="text"
+                                name="comment"
+                                value={metadata.comment || ""}
+                                onChange={handleInputChange}
+                                placeholder="Enter your comment"
+                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            />
+                        </div>
+
+
                         <div className="mt-6 flex justify-end space-x-4">
                             {errorMessage && (
                                 <div className="mt-4 text-sm text-red-500">
@@ -276,6 +291,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                             <p><strong>Material:</strong> {uploadResult.material || "N/A"}</p>
                             <p><strong>Brand:</strong> {uploadResult.brand || "N/A"}</p>
                             <p><strong>Shape:</strong> {uploadResult.shape || "N/A"}</p>
+                            <p><strong>Comment:</strong> {uploadResult.comment || "N/A"}</p>
                             <p><strong>Timestamp:</strong> {uploadResult.timestamp || "N/A"}</p>
                             <p><strong>Robot:</strong> {uploadResult.robot || "N/A"}</p>
                             <p><strong>Date Taken:</strong> {uploadResult.datetime_taken || "N/A"}</p>

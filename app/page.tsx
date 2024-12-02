@@ -19,7 +19,6 @@ import 'video.js/dist/video-js.css';
 import Layout from './layout';
 import './styles.css';
 
-// Components
 import { handleFileUpload } from './components/FileUploadHandler';
 import Footer from './components/Footer';
 
@@ -56,6 +55,7 @@ interface Result {
     original_s3_uri?: string;
     robot?: string;
     shape?: string;
+    comment?: string;
     timestamp?: string;
   };
 }
@@ -379,7 +379,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* Display Upload Status Outside Modal */}
           {uploadStatus && (
             <div
               className={`mt-4 p-2 rounded ${uploadStatus.includes("successful")
@@ -450,12 +449,11 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Include UploadModal */}
         <UploadModal
           isOpen={isModalOpen}
           onClose={closeModal}
           apiUrl={`${API_URL}/api`}
-          setUploadStatus={setUploadStatus} // Pass setUploadStatus to the modal
+          setUploadStatus={setUploadStatus}
         />
 
 
