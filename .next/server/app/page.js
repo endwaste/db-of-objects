@@ -508,7 +508,9 @@ const ResultsDisplay = ({ isLoadingResults, results, getScoreLabel, getVideoId }
                         result.metadata.file_type === "image" ? /*#__PURE__*/ jsx_runtime_.jsx((image_default()), {
                             src: result.metadata.s3_presigned_url,
                             alt: "Result",
-                            className: "w-full h-auto object-cover mt-2 rounded"
+                            className: "w-full h-auto object-cover mt-2 rounded",
+                            width: "640",
+                            height: "360"
                         }) : /*#__PURE__*/ jsx_runtime_.jsx("div", {
                             className: "video-container mt-2 rounded",
                             children: /*#__PURE__*/ (0,jsx_runtime_.jsxs)("video", {
@@ -1433,6 +1435,8 @@ const UploadModal = ({ isOpen, onClose, apiUrl, setUploadStatus })=>{
                                 /*#__PURE__*/ jsx_runtime_.jsx((image_default()), {
                                     src: imageUrl,
                                     alt: "Preview",
+                                    width: 400,
+                                    height: 400,
                                     className: "w-48 h-auto mt-2 rounded-lg"
                                 })
                             ]
@@ -1596,6 +1600,8 @@ const UploadModal = ({ isOpen, onClose, apiUrl, setUploadStatus })=>{
                         /*#__PURE__*/ jsx_runtime_.jsx((image_default()), {
                             src: uploadResult.presigned_url,
                             alt: "Uploaded",
+                            width: 400,
+                            height: 400,
                             className: "w-full h-auto mb-4 rounded"
                         }),
                         /*#__PURE__*/ (0,jsx_runtime_.jsxs)("div", {

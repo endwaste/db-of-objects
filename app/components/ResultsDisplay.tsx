@@ -61,12 +61,13 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
 
               return (
                 <div key={videoId}>
-                  {/* Image or video */}
                   {result.metadata.file_type === 'image' ? (
                     <Image
                       src={result.metadata.s3_presigned_url}
                       alt="Result"
                       className="w-full h-auto object-cover mt-2 rounded"
+                      width="640"
+                      height="360"
                     />
                   ) : (
                     <div className="video-container mt-2 rounded">

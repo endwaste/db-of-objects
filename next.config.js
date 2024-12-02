@@ -12,6 +12,12 @@ const nextConfig = {
       }
     ];
   },
+  images: {
+    domains: [
+      "glacier-ml-training.s3.amazonaws.com",
+      "s3.us-west-2.amazonaws.com",
+    ],
+  },
 };
 
 module.exports = nextConfig;
