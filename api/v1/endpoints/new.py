@@ -147,6 +147,9 @@ async def add_new_data(
             key: (value if value is not None else "") for key, value in metadata.items()
         }
         save_to_pinecone(image_embeddings, metadata)
+
+        metadata["status"] = "active"
+
         append_metadata_to_s3(metadata)
 
         metadata["presigned_url"] = presigned_url
@@ -406,15 +409,15 @@ def append_metadata_to_s3(metadata: dict) -> None:
                             "timestamp",
                             "robot",
                             "datetime_taken",
+                            "status",
                         ]
                     )
 
-            # Append the new metadata to the temporary file
             with open(temp_file_name, "a", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(
                     [
-                        metadata.get("embedding_id", ""),  # Add the embedding ID
+                        metadata.get("embedding_id", ""),
                         metadata.get("color", ""),
                         metadata.get("material", ""),
                         metadata.get("brand", ""),
@@ -425,6 +428,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
                         metadata.get("timestamp", ""),
                         metadata.get("robot", ""),
                         metadata.get("datetime_taken", ""),
+                        metadata.get("status", ""),
                     ]
                 )
                 logger.info(

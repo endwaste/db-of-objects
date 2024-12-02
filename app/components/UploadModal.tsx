@@ -12,7 +12,7 @@ interface UploadModalProps {
     isOpen: boolean;
     onClose: () => void;
     apiUrl: string;
-    setUploadStatus: (status: string | null) => void; // Pass the status setter
+    setUploadStatus: (status: string | null) => void;
 }
 
 const UploadModal: React.FC<UploadModalProps> = ({
@@ -32,6 +32,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
     const [isCustomBrand, setIsCustomBrand] = useState(false);
     const [uploadResult, setUploadResult] = useState<any>(null); // For upload response
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [imageUrl, setImageUrl] = useState<string | null>(null);
 
 
     const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -52,7 +53,13 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setFile(e.target.files[0]);
+            const file = e.target.files[0];
+            setFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setImageUrl(reader.result as string); // Set the image preview URL
+            };
+            reader.readAsDataURL(file); // Read the file as a data URL
         }
     };
 
@@ -77,11 +84,10 @@ const UploadModal: React.FC<UploadModalProps> = ({
         });
 
         try {
-            const response = await axios.post(apiUrl, formData, {
+            const response = await axios.post(`${apiUrl}/new`, formData, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
-            // Store the response data (including presigned_url and metadata)
             setUploadResult(response.data.metadata);
 
         } catch (error) {
@@ -92,22 +98,30 @@ const UploadModal: React.FC<UploadModalProps> = ({
         }
     };
 
+    const handleUndo = async (id: string) => {
+        try {
+            const response = await axios.post(`${apiUrl}/delete`, { embedding_id: id });
+            handleClose();
+        } catch (error) {
+            console.error("Error undoing the upload:", error);
+        }
+    };
+
 
     const handleClose = () => {
-        // Reset all states to their initial values
         setMetadata({
             brand: "",
             color: "",
             material: "",
             shape: "",
         });
-        setFile(null); // Clear the selected file
+        setFile(null);
+        setImageUrl(null);
         setErrorMessage(null);
-        setUploadResult(null); // Clear the upload result summary
-        setIsCustomBrand(false); // Reset custom brand input visibility
-        onClose(); // Call the parent-provided onClose handler to close the modal
+        setUploadResult(null);
+        setIsCustomBrand(false);
+        onClose();
     };
-
 
     if (!isOpen) return null;
 
@@ -136,6 +150,13 @@ const UploadModal: React.FC<UploadModalProps> = ({
                             onChange={handleFileChange}
                             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                         />
+                        {/* Add this below the file input to display the image preview */}
+                        {imageUrl && (
+                            <div className="mt-4">
+                                <h3 className="text-sm font-medium text-gray-700">Image Preview</h3>
+                                <img src={imageUrl} alt="Preview" className="w-48 h-auto mt-2 rounded-lg" />
+                            </div>
+                        )}
 
                         {/* Dropdowns */}
                         <div className="mt-4">
@@ -258,6 +279,20 @@ const UploadModal: React.FC<UploadModalProps> = ({
                             <p><strong>Timestamp:</strong> {uploadResult.timestamp || "N/A"}</p>
                             <p><strong>Robot:</strong> {uploadResult.robot || "N/A"}</p>
                             <p><strong>Date Taken:</strong> {uploadResult.datetime_taken || "N/A"}</p>
+                        </div>
+                        <div className="mt-6 flex justify-end space-x-4">
+                            <button
+                                onClick={() => handleUndo(uploadResult.embedding_id)} // Pass the ID to the undo handler
+                                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300"
+                            >
+                                Undo
+                            </button>
+                            <button
+                                onClick={handleClose}
+                                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300"
+                            >
+                                Close
+                            </button>
                         </div>
                     </>
                 )}

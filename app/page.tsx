@@ -454,7 +454,7 @@ export default function Home() {
         <UploadModal
           isOpen={isModalOpen}
           onClose={closeModal}
-          apiUrl={`${API_URL}/api/new`}
+          apiUrl={`${API_URL}/api`}
           setUploadStatus={setUploadStatus} // Pass setUploadStatus to the modal
         />
 

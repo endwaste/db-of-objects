@@ -1252,6 +1252,7 @@ const UploadModal = ({ isOpen, onClose, apiUrl, setUploadStatus })=>{
     const [isCustomBrand, setIsCustomBrand] = (0,react_.useState)(false);
     const [uploadResult, setUploadResult] = (0,react_.useState)(null); // For upload response
     const [errorMessage, setErrorMessage] = (0,react_.useState)(null);
+    const [imageUrl, setImageUrl] = (0,react_.useState)(null);
     const handleBrandChange = (e)=>{
         const value = e.target.value;
         if (value === "Other") {
@@ -1276,7 +1277,13 @@ const UploadModal = ({ isOpen, onClose, apiUrl, setUploadStatus })=>{
     };
     const handleFileChange = (e)=>{
         if (e.target.files && e.target.files[0]) {
-            setFile(e.target.files[0]);
+            const file = e.target.files[0];
+            setFile(file);
+            const reader = new FileReader();
+            reader.onloadend = ()=>{
+                setImageUrl(reader.result); // Set the image preview URL
+            };
+            reader.readAsDataURL(file); // Read the file as a data URL
         }
     };
     const handleInputChange = (e)=>{
@@ -1299,12 +1306,11 @@ const UploadModal = ({ isOpen, onClose, apiUrl, setUploadStatus })=>{
             if (value) formData.append(key, value);
         });
         try {
-            const response = await axios/* default */.Z.post(apiUrl, formData, {
+            const response = await axios/* default */.Z.post(`${apiUrl}/new`, formData, {
                 headers: {
                     "Content-Type": "multipart/form-data"
                 }
             });
-            // Store the response data (including presigned_url and metadata)
             setUploadResult(response.data.metadata);
         } catch (error) {
             console.error("Upload error:", error);
@@ -1313,19 +1319,29 @@ const UploadModal = ({ isOpen, onClose, apiUrl, setUploadStatus })=>{
             setIsUploading(false);
         }
     };
+    const handleUndo = async (id)=>{
+        try {
+            const response = await axios/* default */.Z.post(`${apiUrl}/delete`, {
+                embedding_id: id
+            });
+            handleClose();
+        } catch (error) {
+            console.error("Error undoing the upload:", error);
+        }
+    };
     const handleClose = ()=>{
-        // Reset all states to their initial values
         setMetadata({
             brand: "",
             color: "",
             material: "",
             shape: ""
         });
-        setFile(null); // Clear the selected file
+        setFile(null);
+        setImageUrl(null);
         setErrorMessage(null);
-        setUploadResult(null); // Clear the upload result summary
-        setIsCustomBrand(false); // Reset custom brand input visibility
-        onClose(); // Call the parent-provided onClose handler to close the modal
+        setUploadResult(null);
+        setIsCustomBrand(false);
+        onClose();
     };
     if (!isOpen) return null;
     return /*#__PURE__*/ jsx_runtime_.jsx("div", {
@@ -1353,6 +1369,20 @@ const UploadModal = ({ isOpen, onClose, apiUrl, setUploadStatus })=>{
                             accept: "image/*",
                             onChange: handleFileChange,
                             className: "block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        }),
+                        imageUrl && /*#__PURE__*/ (0,jsx_runtime_.jsxs)("div", {
+                            className: "mt-4",
+                            children: [
+                                /*#__PURE__*/ jsx_runtime_.jsx("h3", {
+                                    className: "text-sm font-medium text-gray-700",
+                                    children: "Image Preview"
+                                }),
+                                /*#__PURE__*/ jsx_runtime_.jsx("img", {
+                                    src: imageUrl,
+                                    alt: "Preview",
+                                    className: "w-48 h-auto mt-2 rounded-lg"
+                                })
+                            ]
                         }),
                         /*#__PURE__*/ (0,jsx_runtime_.jsxs)("div", {
                             className: "mt-4",
@@ -1563,6 +1593,21 @@ const UploadModal = ({ isOpen, onClose, apiUrl, setUploadStatus })=>{
                                         " ",
                                         uploadResult.datetime_taken || "N/A"
                                     ]
+                                })
+                            ]
+                        }),
+                        /*#__PURE__*/ (0,jsx_runtime_.jsxs)("div", {
+                            className: "mt-6 flex justify-end space-x-4",
+                            children: [
+                                /*#__PURE__*/ jsx_runtime_.jsx("button", {
+                                    onClick: ()=>handleUndo(uploadResult.embedding_id),
+                                    className: "px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300",
+                                    children: "Undo"
+                                }),
+                                /*#__PURE__*/ jsx_runtime_.jsx("button", {
+                                    onClick: handleClose,
+                                    className: "px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300",
+                                    children: "Close"
                                 })
                             ]
                         })
@@ -2207,7 +2252,7 @@ function Home() {
                     /*#__PURE__*/ jsx_runtime_.jsx(components_UploadModal, {
                         isOpen: isModalOpen,
                         onClose: closeModal,
-                        apiUrl: `${API_URL}/api/new`,
+                        apiUrl: `${API_URL}/api`,
                         setUploadStatus: setUploadStatus
                     }),
                     /*#__PURE__*/ jsx_runtime_.jsx(components_Footer, {})
