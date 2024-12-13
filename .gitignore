@@ -1,4 +1,4 @@
 .env.development
 node_modules/
 **/__pycache__/
-.next
+.next/
