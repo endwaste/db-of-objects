@@ -26,12 +26,15 @@ load_dotenv("../.env.development")
 
 # Load the fine-tuned CLIP model
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model, preprocess = clip.load("ViT-B/32", device=device)
+s3_model_path = os.getenv('MODEL_PATH')
+clip_model = os.getenv('MODEL')
+print(f"Loading model {clip_model} from {s3_model_path}")
+model, preprocess = clip.load(clip_model, device=device)
 finetuned_weights_path = "/tmp/best_fine_tuned_clip_model.pth"
 
 # Download weights if not already downloaded
 s3_client = settings.get_s3_client()
-s3_client.download_file("glacier-ml-training", "artifacts/dev/CLIP/finetuned/best_fine_tuned_clip_model.pth", finetuned_weights_path)
+s3_client.download_file("glacier-ml-training", s3_model_path, finetuned_weights_path)
 model.load_state_dict(torch.load(finetuned_weights_path, map_location=device, weights_only=True))
 
 def process_image(image_file, bucket_name, prefix, model, index, file_path, image_index, total_images, max_retries=5):
@@ -43,6 +46,7 @@ def process_image(image_file, bucket_name, prefix, model, index, file_path, imag
         local_image_path = temp_file.name
 
     class_name = image_file.rsplit('_', 1)[0]
+    class_name = "RANDOM"
 
     attempt = 0
     while attempt < max_retries:
@@ -88,14 +92,42 @@ def main(s3_bucket_name, s3_folder_name, pinecone_index_name):
     pc = Pinecone(api_key=api_key, source_tag="pinecone:stl_sample_app")
     index = pc.Index(pinecone_index_name)
 
-    response = s3_client.list_objects_v2(Bucket=s3_bucket_name, Prefix=s3_folder_name)
-    image_files = [obj['Key'].split('/')[-1] for obj in response.get('Contents', []) if obj['Key'].endswith(('jpeg', 'jpg', 'png', 'bmp', 'gif'))]
+    image_files = []
+    continuation_token = None
+
+    while True:
+        if continuation_token:
+            response = s3_client.list_objects_v2(
+                Bucket=s3_bucket_name,
+                Prefix=s3_folder_name,
+                ContinuationToken=continuation_token
+            )
+        else:
+            response = s3_client.list_objects_v2(
+                Bucket=s3_bucket_name,
+                Prefix=s3_folder_name
+            )
+        
+        # Add image files from the current response
+        image_files.extend(
+            obj['Key'].split('/')[-1] for obj in response.get('Contents', []) if obj['Key'].endswith(('jpeg', 'jpg', 'png', 'bmp', 'gif'))
+        )
+
+        # Check if more objects need to be fetched
+        if response.get('IsTruncated'):  # True if there are more objects
+            continuation_token = response.get('NextContinuationToken')
+        else:
+            break
+
 
     total_images = len(image_files)
+    print(f"Total images found: {total_images}")
+    
     with ThreadPoolExecutor() as executor:
         futures = [executor.submit(process_image, image_file, s3_bucket_name, s3_folder_name, model, index, file_path, i + 1, total_images) for i, image_file in enumerate(image_files)]
         for future in as_completed(futures):
             future.result()
+
 
 if __name__ == '__main__':
     import argparse

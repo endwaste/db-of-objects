@@ -20,6 +20,10 @@ class Settings:
         self.index_name = os.getenv("PINECONE_INDEX_NAME")
         self.k = int(os.getenv("PINECONE_TOP_K", 20))
 
+        # Model path
+        self.model_path = os.getenv("MODEL_PATH")
+        self.model = os.getenv("MODEL")
+
     def get_s3_client(self, region_name=None):
         """Get or create an S3 client for the specified region."""
         region_name = region_name or self.default_region
