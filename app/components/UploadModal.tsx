@@ -5,6 +5,7 @@ import Image from "next/image";
 import React, { useState } from "react";
 
 import brandOptions from "@/app/constants/brandOptions";
+import modifierOptions from "@/app/constants/modifierOptions";
 import colorOptions from "@/app/constants/colorOptions";
 import materialOptions from "@/app/constants/materialOptions";
 import shapeOptions from "@/app/constants/shapeOptions";
@@ -24,6 +25,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
 }) => {
     const [metadata, setMetadata] = useState<{
         brand?: string;
+        modifier?: string;
         color?: string;
         material?: string;
         shape?: string;
@@ -114,6 +116,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
         setMetadata({
             brand: "",
             color: "",
+            modifier: "",
             material: "",
             shape: "",
             comment: "",
@@ -230,17 +233,34 @@ const UploadModal: React.FC<UploadModalProps> = ({
                         </div>
 
                         <div className="mt-4">
-                            <label className="block mb-2 text-sm font-medium text-gray-700">Shape</label>
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Form factor</label>
                             <select
                                 name="shape"
                                 value={metadata.shape || ""}
                                 onChange={handleInputChange}
                                 className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
                             >
-                                <option value="" disabled>Select a shape</option>
+                                <option value="" disabled>Select a form factor</option>
                                 {shapeOptions.map((shape) => (
                                     <option key={shape.value} value={shape.value}>
                                         {shape.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="mt-4">
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Modifier</label>
+                            <select
+                                name="modifier"
+                                value={metadata.modifier || ""}
+                                onChange={handleInputChange}
+                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            >
+                                <option value="" disabled>Select a modifier</option>
+                                {modifierOptions.map((modifier) => (
+                                    <option key={modifier.value} value={modifier.value}>
+                                        {modifier.label}
                                     </option>
                                 ))}
                             </select>
@@ -299,7 +319,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
                             <p><strong>Color:</strong> {uploadResult.color || "N/A"}</p>
                             <p><strong>Material:</strong> {uploadResult.material || "N/A"}</p>
                             <p><strong>Brand:</strong> {uploadResult.brand || "N/A"}</p>
-                            <p><strong>Shape:</strong> {uploadResult.shape || "N/A"}</p>
+                            <p><strong>Form Factor:</strong> {uploadResult.shape || "N/A"}</p>
+                            <p><strong>Modifier:</strong> {uploadResult.modifier || "N/A"}</p>
                             <p><strong>Comment:</strong> {uploadResult.comment || "N/A"}</p>
                             <p><strong>Timestamp:</strong> {uploadResult.timestamp || "N/A"}</p>
                             <p><strong>Robot:</strong> {uploadResult.robot || "N/A"}</p>

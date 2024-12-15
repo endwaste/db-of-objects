@@ -15,6 +15,7 @@ interface Result {
     interval_sec?: number;
     segment?: number;
     brand?: string;
+    modifier?: string;
     color?: string;
     coordinates?: string;
     datetime_taken?: string;

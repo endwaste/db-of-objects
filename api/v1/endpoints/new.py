@@ -38,12 +38,13 @@ async def add_new_data(
     s3_file_path: Optional[str] = Form(None),
     coordinates: Optional[Union[List[float], str]] = Form(None),
     comment: Optional[str] = Form(None),
+    modifier: Optional[str] = Form(None),
 ):
     """
     Add new data to Pinecone and update metadata CSV in S3.
     """
     logger.info(
-        f"Received POST request with color={color}, material={material}, brand={brand}, shape={shape}"
+        f"Received POST request with color={color}, material={material}, brand={brand}, shape={shape} and modifier={modifier}"
     )
     logger.info("Starting new data entry processing...")
     try:
@@ -120,6 +121,7 @@ async def add_new_data(
             "material": material,
             "brand": brand,
             "shape": shape,
+            "modifier": modifier,
             "original_s3_uri": original_s3_uri,
             "s3_file_path": s3_file_path,
         }
@@ -142,6 +144,7 @@ async def add_new_data(
             "datetime_taken": datetime_taken,
             "file_type": "image",
             "comment": comment,
+            "modifier": modifier,
         }
         metadata = {
             key: (value if value is not None else "") for key, value in metadata.items()
@@ -218,6 +221,7 @@ def check_duplicate_in_pinecone(metadata: dict) -> bool:
                 "material": metadata.get("material"),
                 "brand": metadata.get("brand"),
                 "shape": metadata.get("shape"),
+                "modifier": metadata.get("modifier"),
                 "original_s3_uri": metadata.get("original_s3_uri"),
             }.items()
             if value is not None
@@ -397,6 +401,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
                             "robot",
                             "datetime_taken",
                             "comment",
+                            "modifier",
                             "status",
                         ]
                     )
@@ -409,7 +414,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
                         metadata.get("color", ""),
                         metadata.get("material", ""),
                         metadata.get("brand", ""),
-                        metadata.get("shape", ""),
+                        metadata.get("shape", "",)
                         metadata.get("original_s3_uri", ""),
                         metadata.get("s3_file_path", ""),
                         metadata.get("coordinates", ""),
@@ -418,6 +423,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
                         metadata.get("datetime_taken", ""),
                         metadata.get("comment", ""),
                         metadata.get("status", ""),
+                        metadata.get("modifier", ""),
                     ]
                 )
                 logger.info(

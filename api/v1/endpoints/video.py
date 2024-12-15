@@ -20,7 +20,7 @@ def extract_frames(video_path, interval_sec=15, num_frames=8):
     probe = ffmpeg.probe(video_path)
     duration = float(probe['format']['duration'])
     timestamps = [interval_sec * i for i in range(num_frames) if interval_sec * i < duration]
-    
+
     frames = []
     for timestamp in timestamps:
         frame, _ = (
@@ -39,15 +39,15 @@ async def query_video(file: UploadFile = File(...)):
         file_path = f"/tmp/{file.filename}"
         with open(file_path, "wb") as buffer:
             buffer.write(await file.read())
-        
+
         # Check file size
         if os.path.getsize(file_path) > 20 * 1024 * 1024:  # 20 MB limit
             os.remove(file_path)
             raise HTTPException(status_code=400, detail="We don't support videos greater than 20 MB. Please upload a smaller video.")
-        
+
         # Extract frames from the video
         frames = extract_frames(file_path)
-        
+
         # Process each frame with CLIP and average the embeddings
         embeddings = []
         with torch.no_grad():  # Add no_grad here
@@ -55,17 +55,17 @@ async def query_video(file: UploadFile = File(...)):
                 image_tensor = preprocess(frame).unsqueeze(0).to(device)
                 embedding = model.encode_image(image_tensor).cpu().numpy().flatten()
                 embeddings.append(embedding)
-        
+
         # Compute the average embedding for the video
         video_embedding = sum(embeddings) / len(embeddings)
-        
+
         # Query Pinecone with the generated embedding
         query_response = deps.index.query(
             vector=video_embedding.tolist(),
             top_k=settings.k,
             include_metadata=True
         )
-        
+
         s3_client = settings.get_s3_client()
         matches = query_response['matches']
 
@@ -99,6 +99,6 @@ async def query_video(file: UploadFile = File(...)):
             })
         os.remove(file_path)
         return {"results": results}
-    
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

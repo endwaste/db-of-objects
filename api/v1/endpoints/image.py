@@ -82,6 +82,7 @@ async def query_image(file: UploadFile = File(...)):
                         "s3_file_path": s3_file_path,
                         "s3_presigned_url": presigned_url,
                         "brand": metadata.get("brand"),
+                        "modifier": metadata.get("modifier"),
                         "color": metadata.get("color"),
                         "coordinates": metadata.get("coordinates"),
                         "datetime_taken": metadata.get("datetime_taken"),
