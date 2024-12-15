@@ -7,8 +7,7 @@ torchvision==0.20.1
 boto3
 pinecone-client==4.1.0
 openai-clip
+fastapi
 ffmpeg
 uvicorn[standard]
 piexif
-
-
