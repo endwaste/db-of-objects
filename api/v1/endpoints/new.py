@@ -414,7 +414,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
                         metadata.get("color", ""),
                         metadata.get("material", ""),
                         metadata.get("brand", ""),
-                        metadata.get("shape", "",)
+                        metadata.get("shape", ""),
                         metadata.get("original_s3_uri", ""),
                         metadata.get("s3_file_path", ""),
                         metadata.get("coordinates", ""),
