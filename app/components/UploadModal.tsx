@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 
 import brandOptions from "@/app/constants/brandOptions";
 import modifierOptions from "@/app/constants/modifierOptions";
@@ -37,6 +37,35 @@ const UploadModal: React.FC<UploadModalProps> = ({
     const [uploadResult, setUploadResult] = useState<any>(null); // For upload response
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
+    const modifierDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Hide modifier dropdown on outside click
+    useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+          const dropdown = modifierDropdownRef.current;
+
+          // Close the dropdown if the click is outside the dropdown
+          if (dropdown && !dropdown.contains(event.target as Node)) {
+              dropdown.classList.add("hidden");
+          }
+      };
+
+      // Attach the listener to the document
+      document.addEventListener("mousedown", handleClickOutside);
+
+      // Cleanup the listener on component unmount
+      return () => {
+          document.removeEventListener("mousedown", handleClickOutside);
+      };
+  }, []);
+
+
+    const handleModifierDropdownToggle = () => {
+      const dropdown = modifierDropdownRef.current?.querySelector("div");
+      if (dropdown) {
+          dropdown.classList.toggle("hidden");
+      }
+    };
 
 
     const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -133,7 +162,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
     return (
         <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white w-96 rounded-lg shadow-lg p-6 relative">
+            <div className="bg-white w-96 max-h-screen overflow-y-auto rounded-lg shadow-lg p-6 relative">
                 {/* Close Button */}
                 <button
                     className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 focus:outline-none"
@@ -251,19 +280,64 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
                         <div className="mt-4">
                             <label className="block mb-2 text-sm font-medium text-gray-700">Modifier</label>
-                            <select
-                                name="modifier"
-                                value={metadata.modifier || ""}
-                                onChange={handleInputChange}
-                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-                            >
-                                <option value="" disabled>Select a modifier</option>
-                                {modifierOptions.map((modifier) => (
-                                    <option key={modifier.value} value={modifier.value}>
-                                        {modifier.label}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="relative">
+                                {/* Trigger button */}
+                                <button
+                                    type="button"
+                                    className="block w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white text-left"
+                                    onClick={(e) => {
+                                        e.stopPropagation(); // Prevent immediate dropdown closure
+                                        const dropdown = modifierDropdownRef.current;
+                                        dropdown?.classList.toggle("hidden");
+                                    }}
+                                >
+                                    {metadata.modifier
+                                        ? metadata.modifier.split(", ").join(", ")
+                                        : "Select modifiers"}
+                                </button>
+
+                                {/* Dropdown menu */}
+                                <div
+                                    ref={modifierDropdownRef}
+                                    className="absolute mt-2 w-full bg-white border border-gray-300 rounded-md shadow-md z-10 hidden"
+                                >
+                                    {modifierOptions.map((modifier) => (
+                                        <label
+                                            key={modifier.value}
+                                            className="block px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                value={modifier.value}
+                                                checked={
+                                                    metadata.modifier
+                                                        ?.split(", ")
+                                                        .includes(modifier.value) || false
+                                                }
+                                                onChange={(e) => {
+                                                    const selectedOptions = metadata.modifier
+                                                        ? metadata.modifier.split(", ")
+                                                        : [];
+                                                    if (e.target.checked) {
+                                                        selectedOptions.push(modifier.value);
+                                                    } else {
+                                                        const index = selectedOptions.indexOf(
+                                                            modifier.value
+                                                        );
+                                                        if (index > -1) selectedOptions.splice(index, 1);
+                                                    }
+                                                    setMetadata({
+                                                        ...metadata,
+                                                        modifier: selectedOptions.join(", "),
+                                                    });
+                                                }}
+                                                className="mr-2"
+                                            />
+                                            {modifier.label}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
 
                         <div className="mt-4">
