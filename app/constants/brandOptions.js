@@ -1,6 +1,7 @@
 const brandOptions = [
     { value: "", label: "No brand" },
 
+    { value: "Unknown", label: "Unknown" },
     { value: "Coca Cola", label: "Coca Cola" },
     { value: "Sprite", label: "Sprite" },
     { value: "Starbucks", label: "Starbucks" },
