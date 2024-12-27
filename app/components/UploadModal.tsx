@@ -162,7 +162,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
     return (
         <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white w-full max-w-md rounded-lg shadow-lg flex flex-col overflow-hidden p-6">
+            <div className="bg-white w-full max-w-md rounded-lg shadow-lg flex flex-col p-6 h-[80vh] overflow-y-scroll">
 
                 {/* Close Button */}
                 <button
@@ -300,8 +300,9 @@ const UploadModal: React.FC<UploadModalProps> = ({
                                 {/* Dropdown menu */}
                                 <div
                                     ref={modifierDropdownRef}
-                                    className="absolute mt-2 w-full bg-white border border-gray-300 rounded-md shadow-md z-10 hidden"
+                                    className="absolute mt-2 w-full max-h-48 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-md z-50"
                                 >
+
                                     {modifierOptions.map((modifier) => (
                                         <label
                                             key={modifier.value}
