@@ -2,12 +2,12 @@
 
 import axios from "axios";
 import Image from "next/image";
-import React, { useRef, useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import brandOptions from "@/app/constants/brandOptions";
-import modifierOptions from "@/app/constants/modifierOptions";
 import colorOptions from "@/app/constants/colorOptions";
 import materialOptions from "@/app/constants/materialOptions";
+import modifierOptions from "@/app/constants/modifierOptions";
 import shapeOptions from "@/app/constants/shapeOptions";
 
 interface UploadModalProps {
@@ -41,30 +41,30 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
     // Hide modifier dropdown on outside click
     useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-          const dropdown = modifierDropdownRef.current;
+        const handleClickOutside = (event: MouseEvent) => {
+            const dropdown = modifierDropdownRef.current;
 
-          // Close the dropdown if the click is outside the dropdown
-          if (dropdown && !dropdown.contains(event.target as Node)) {
-              dropdown.classList.add("hidden");
-          }
-      };
+            // Close the dropdown if the click is outside the dropdown
+            if (dropdown && !dropdown.contains(event.target as Node)) {
+                dropdown.classList.add("hidden");
+            }
+        };
 
-      // Attach the listener to the document
-      document.addEventListener("mousedown", handleClickOutside);
+        // Attach the listener to the document
+        document.addEventListener("mousedown", handleClickOutside);
 
-      // Cleanup the listener on component unmount
-      return () => {
-          document.removeEventListener("mousedown", handleClickOutside);
-      };
-  }, []);
+        // Cleanup the listener on component unmount
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
 
 
     const handleModifierDropdownToggle = () => {
-      const dropdown = modifierDropdownRef.current?.querySelector("div");
-      if (dropdown) {
-          dropdown.classList.toggle("hidden");
-      }
+        const dropdown = modifierDropdownRef.current?.querySelector("div");
+        if (dropdown) {
+            dropdown.classList.toggle("hidden");
+        }
     };
 
 
@@ -162,7 +162,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
     return (
         <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white w-96 max-h-screen overflow-y-auto rounded-lg shadow-lg p-6 relative">
+            <div className="bg-white w-full max-w-md rounded-lg shadow-lg flex flex-col overflow-hidden p-6">
+
                 {/* Close Button */}
                 <button
                     className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 focus:outline-none"

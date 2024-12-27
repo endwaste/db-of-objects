@@ -422,8 +422,8 @@ def append_metadata_to_s3(metadata: dict) -> None:
                         metadata.get("robot", ""),
                         metadata.get("datetime_taken", ""),
                         metadata.get("comment", ""),
-                        metadata.get("status", ""),
                         metadata.get("modifier", ""),
+                        metadata.get("status", ""),
                     ]
                 )
                 logger.info(

@@ -3,6 +3,7 @@
 
 import React, { useState } from 'react';
 import ClassFilter from './components/ClassFilter';
+import EditModal from './components/EditModal';
 import Header from './components/Header';
 import ResultsDisplay from './components/ResultsDisplay';
 import SearchForm from './components/SearchForm';
@@ -77,6 +78,13 @@ export default function Home() {
   const [isLoadingResults, setIsLoadingResults] = useState<boolean>(false);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const [selectedClass, setSelectedClass] = useState<string>('');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editMetadata, setEditMetadata] = useState<Record<string, any> | null>(null);
+
+  const openEditModal = (metadata: any) => {
+    setEditMetadata(metadata);
+    setIsEditModalOpen(true);
+  };
   const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedClass(e.target.value);
   };
@@ -351,7 +359,7 @@ export default function Home() {
               handleFocus={handleFocus}
               openModal={openModal}
             />
-            <div className="mt-4">
+            {/* <div className="mt-4">
               <ClassFilter
                 selectedClass={selectedClass}
                 onClassChange={handleClassChange}
@@ -361,7 +369,7 @@ export default function Home() {
                   )
                 )}
               />
-            </div>
+            </div> */}
 
             {errorMessage && (
               <div className="w-full mt-4 text-red-500 text-center">
@@ -442,10 +450,12 @@ export default function Home() {
               </div>
             )}
             <ResultsDisplay
+              apiUrl={`${API_URL}/api`}
               isLoadingResults={isLoadingResults}
               results={filteredResults}
               getScoreLabel={getScoreLabel}
               getVideoId={getVideoId}
+              onEdit={openEditModal}
             />
           </div>
         </div>
@@ -457,6 +467,13 @@ export default function Home() {
           setUploadStatus={setUploadStatus}
         />
 
+        <EditModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          apiUrl={`${API_URL}/api`}
+          metadata={editMetadata || {}}
+          setEditStatus={(status) => console.log(status)}
+        />
 
         <Footer />
       </div>

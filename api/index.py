@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from api.v1.endpoints import text, image, video, index, new, delete
+from api.v1.endpoints import text, image, video, index, new, delete, update
 
 app = FastAPI()
 
@@ -29,3 +29,4 @@ app.include_router(video.router, prefix="/api")
 app.include_router(index.router, prefix="/api")
 app.include_router(new.router, prefix="/api")
 app.include_router(delete.router, prefix="/api")
+app.include_router(update.router, prefix="/api")
