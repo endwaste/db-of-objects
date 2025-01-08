@@ -2,7 +2,6 @@
 
 
 import React, { useState } from 'react';
-import ClassFilter from './components/ClassFilter';
 import EditModal from './components/EditModal';
 import Header from './components/Header';
 import ResultsDisplay from './components/ResultsDisplay';
@@ -42,7 +41,7 @@ interface Result {
     s3_file_name?: string;
     s3_file_path?: string;
     s3_presigned_url: string;
-    whole_image_presigned_url: string;
+    whole_image_presigned_url?: string;
     file_type: 'image' | 'video' | 'text';
     start_offset_sec?: number;
     end_offset_sec?: number;

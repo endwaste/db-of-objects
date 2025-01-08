@@ -167,7 +167,7 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                     {result.metadata.whole_image_presigned_url && (
                       <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                         <button
-                          onClick={() => openWholeImage(result.metadata.whole_image_presigned_url, result.metadata.coordinates)}
+                          onClick={() => openWholeImage(result.metadata.whole_image_presigned_url || '', result.metadata.coordinates)}
                           className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md shadow-md hover:bg-blue-700 focus:outline-none"
                         >
                           View Whole Image
@@ -204,7 +204,13 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
         )
       )}
 
-      {selectedWholeImage && <WholeImageViewer imageUrl={selectedWholeImage} coordinates={selectedCoordinates} onClose={closeWholeImage} />}
+      {selectedWholeImage && (
+        <WholeImageViewer
+          imageUrl={selectedWholeImage || ''}
+          coordinates={selectedCoordinates || undefined}
+          onClose={closeWholeImage}
+        />
+      )}
     </div>
   );
 };
