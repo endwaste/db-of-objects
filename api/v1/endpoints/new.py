@@ -57,25 +57,8 @@ async def add_new_data(
         s3_file_path = extracted_metadata.get("s3_file_path") or s3_file_path
         coordinates = extracted_metadata.get("coordinates") or coordinates
 
-        path_without_prefix = s3_file_path[5:]
-        bucket_name, key = path_without_prefix.split("/", 1)
-
-        region_name = (
-            "us-east-1"
-            if bucket_name == "glacier-ml-training"
-            else (
-                "us-west-2"
-                if bucket_name == "scanner-data.us-west-2"
-                else settings.default_region
-            )
-        )
-
-        s3_client = settings.get_s3_client(region_name=region_name)
-        presigned_url = s3_client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket_name, "Key": key},
-            ExpiresIn=3600,
-        )
+        presigned_url = settings.generate_presigned_url(s3_file_path)
+        whole_image_presigned_url = settings.generate_presigned_url(original_s3_uri)
 
         if not original_s3_uri:
             logger.error("original_s3_uri is missing.")
@@ -156,6 +139,7 @@ async def add_new_data(
         append_metadata_to_s3(metadata)
 
         metadata["presigned_url"] = presigned_url
+        metadata["whole_image_presigned_url"] = whole_image_presigned_url
 
         return {
             "status": "success",

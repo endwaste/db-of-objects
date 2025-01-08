@@ -50,5 +50,26 @@ class Settings:
         pc = Pinecone(api_key=self.api_key, source_tag="pinecone:stl_sample_app")
         return pc.Index(self.index_name)
 
+    def generate_presigned_url(self, s3_uri):
+        if not s3_uri:
+            return None
+
+        path_without_prefix = s3_uri[5:]
+        bucket_name, key = path_without_prefix.split("/", 1)
+
+        region_name = (
+            "us-east-1" if bucket_name == "glacier-ml-training"
+            else "us-west-2" if bucket_name == "scanner-data.us-west-2"
+            else self.default_region
+        )
+
+        s3_client = self.get_s3_client(region_name=region_name)
+
+        return s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket_name, "Key": key},
+            ExpiresIn=3600,
+        )
+
 
 settings = Settings()

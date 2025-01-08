@@ -40,24 +40,6 @@ async def query_text(query: TextQuery):
             metadata = match["metadata"]
             s3_file_path = metadata.get("s3_file_path")
             s3_file_name = metadata.get("s3_file_name")
-            path_without_prefix = s3_file_path[5:]
-            bucket_name, key = path_without_prefix.split("/", 1)
-
-            region_name = (
-                "us-east-1"
-                if bucket_name == "glacier-ml-training"
-                else (
-                    "us-west-2"
-                    if bucket_name == "scanner-data.us-west-2"
-                    else settings.default_region
-                )
-            )
-            s3_client = settings.get_s3_client(region_name=region_name)
-            presigned_url = s3_client.generate_presigned_url(
-                "get_object",
-                Params={"Bucket": bucket_name, "Key": key},
-                ExpiresIn=3600,
-            )
 
             results.append(
                 {
@@ -68,7 +50,9 @@ async def query_text(query: TextQuery):
                         "file_type": metadata.get("file_type"),
                         "s3_file_name": s3_file_name,
                         "s3_file_path": s3_file_path,
-                        "s3_presigned_url": presigned_url,
+                        "s3_presigned_url": settings.generate_presigned_url(
+                            s3_file_path
+                        ),
                         "brand": metadata.get("brand"),
                         "modifier": metadata.get("modifier"),
                         "color": metadata.get("color"),
@@ -81,6 +65,9 @@ async def query_text(query: TextQuery):
                         "shape": metadata.get("shape"),
                         "comment": metadata.get("comment"),
                         "timestamp": metadata.get("timestamp"),
+                        "whole_image_presigned_url": settings.generate_presigned_url(
+                            metadata.get("original_s3_uri")
+                        ),
                     },
                 }
             )
