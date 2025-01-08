@@ -38,6 +38,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const modifierDropdownRef = useRef<HTMLDivElement>(null);
+    const [isModifierDropdownOpen, setIsModifierDropdownOpen] = useState(false);
+
 
     // Hide modifier dropdown on outside click
     useEffect(() => {
@@ -61,11 +63,9 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
 
     const handleModifierDropdownToggle = () => {
-        const dropdown = modifierDropdownRef.current?.querySelector("div");
-        if (dropdown) {
-            dropdown.classList.toggle("hidden");
-        }
+        setIsModifierDropdownOpen((prev) => !prev); // Toggle dropdown visibility
     };
+
 
 
     const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -158,19 +158,26 @@ const UploadModal: React.FC<UploadModalProps> = ({
         onClose();
     };
 
+    useEffect(() => {
+        if (isOpen) {
+            setIsModifierDropdownOpen(false);
+        }
+    }, [isOpen]);
+
+
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white w-full max-w-md rounded-lg shadow-lg flex flex-col p-6 h-[80vh] overflow-y-scroll">
+            <div className="bg-white w-full max-w-md rounded-lg shadow-lg flex flex-col p-6 max-h-[80vh] overflow-y-auto relative">
 
-                {/* Close Button */}
                 <button
-                    className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 focus:outline-none"
+                    className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none z-50"
                     onClick={handleClose}
                 >
                     &times;
                 </button>
+
 
                 {/* Conditional Rendering */}
                 {!uploadResult ? (
@@ -287,9 +294,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
                                     type="button"
                                     className="block w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white text-left"
                                     onClick={(e) => {
-                                        e.stopPropagation(); // Prevent immediate dropdown closure
-                                        const dropdown = modifierDropdownRef.current;
-                                        dropdown?.classList.toggle("hidden");
+                                        e.stopPropagation();
+                                        handleModifierDropdownToggle();
                                     }}
                                 >
                                     {metadata.modifier
@@ -300,8 +306,10 @@ const UploadModal: React.FC<UploadModalProps> = ({
                                 {/* Dropdown menu */}
                                 <div
                                     ref={modifierDropdownRef}
-                                    className="absolute mt-2 w-full max-h-48 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-md z-50"
+                                    className={`absolute mt-2 w-full max-h-48 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-md z-50 ${isModifierDropdownOpen ? "" : "hidden"
+                                        }`}
                                 >
+
 
                                     {modifierOptions.map((modifier) => (
                                         <label
