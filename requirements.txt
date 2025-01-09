@@ -11,3 +11,6 @@ fastapi
 ffmpeg
 uvicorn[standard]
 piexif
+pandas
+numpy
+openpyxl
