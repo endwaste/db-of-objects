@@ -5,7 +5,16 @@ import React, { useEffect, useState } from "react";
 
 const ReviewComplete: React.FC = () => {
     const [uploadStatus, setUploadStatus] = useState<string>("Uploading results...");
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const apiUrl = (() => {
+        switch (process.env.NEXT_PUBLIC_VERCEL_ENV) {
+            case "development":
+                return process.env.NEXT_PUBLIC_DEVELOPMENT_URL || 'http://localhost:8000';
+            case "production":
+                return process.env.NEXT_PUBLIC_PRODUCTION_URL || 'http://ec2-44-243-22-197.us-west-2.compute.amazonaws.com:8000';
+            default:
+                return "http://localhost:8000";
+        }
+    })();
 
     useEffect(() => {
         // Trigger the /complete endpoint on mount

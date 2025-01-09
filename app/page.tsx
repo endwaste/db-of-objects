@@ -27,7 +27,7 @@ const API_URL = (() => {
     case "development":
       return process.env.NEXT_PUBLIC_DEVELOPMENT_URL || 'http://localhost:8000';
     case "production":
-      return process.env.NEXT_PUBLIC_PRODUCTION_URL || 'http://ec2-54-244-26-92.us-west-2.compute.amazonaws.com:8000';
+      return process.env.NEXT_PUBLIC_PRODUCTION_URL || 'http://ec2-44-243-22-197.us-west-2.compute.amazonaws.com:8000';
     default:
       return "http://localhost:8000";
   }
