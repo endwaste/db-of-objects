@@ -31,6 +31,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
         shape?: string;
         comment?: string;
     }>({});
+    const [presignedUrl, setPresignedUrl] = useState<string | null>(null);
     const [file, setFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isCustomBrand, setIsCustomBrand] = useState(false);
@@ -39,6 +40,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const modifierDropdownRef = useRef<HTMLDivElement>(null);
     const [isModifierDropdownOpen, setIsModifierDropdownOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
 
     // Hide modifier dropdown on outside click
@@ -84,15 +86,43 @@ const UploadModal: React.FC<UploadModalProps> = ({
         setMetadata({ ...metadata, brand: e.target.value }); // Save custom brand
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        setErrorMessage(null);
+        setPresignedUrl(null);
+
         if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            setFile(file);
+            const selectedFile = e.target.files[0];
+            setFile(selectedFile);
+
+            // Display image preview
             const reader = new FileReader();
             reader.onloadend = () => {
-                setImageUrl(reader.result as string); // Set the image preview URL
+                setImageUrl(reader.result as string);
             };
-            reader.readAsDataURL(file); // Read the file as a data URL
+            reader.readAsDataURL(selectedFile);
+
+            // Immediately send the file to the backend
+            try {
+                setIsLoading(true);
+                const formData = new FormData();
+                formData.append("file", selectedFile);
+                formData.append("metadata_key", "s3_file_path"); // Default metadata key
+
+                const response = await axios.post(`${apiUrl}/upload-image`, formData, {
+                    headers: { "Content-Type": "multipart/form-data" },
+                });
+
+                if (response.data.presignedUrl) {
+                    setPresignedUrl(response.data.presignedUrl);
+                } else {
+                    setErrorMessage("Presigned URL not found in the response.");
+                }
+            } catch (error) {
+                console.error("Error extracting presigned URL:", error);
+                setErrorMessage("Failed to generate presigned URL. Please try again.");
+            } finally {
+                setIsLoading(false);
+            }
         }
     };
 
@@ -152,6 +182,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
         });
         setFile(null);
         setImageUrl(null);
+        setPresignedUrl(null);
         setErrorMessage(null);
         setUploadResult(null);
         setIsCustomBrand(false);
@@ -206,6 +237,21 @@ const UploadModal: React.FC<UploadModalProps> = ({
                                 />
                             </div>
                         )}
+                        {/* Presigned URL */}
+                        {presignedUrl && (
+                            <div className="mt-4">
+                                <h3 className="text-sm font-medium"></h3>
+                                <a
+                                    href={`https://lens.google.com/uploadbyurl?url=${encodeURIComponent(presignedUrl)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 underline"
+                                >
+                                    Search in Google Lens
+                                </a>
+                            </div>
+                        )}
+
 
                         {/* Dropdowns */}
                         <div className="mt-4">
@@ -427,7 +473,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                     </>
                 )}
             </div>
-        </div>
+        </div >
     );
 };
 

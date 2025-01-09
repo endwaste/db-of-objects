@@ -1,10 +1,13 @@
 const shapeOptions = [
   // Container
+  { value: "Container - Bottle", label: "Container - Bottle" },
   { value: "Container - Bottle Beverage", label: "Container - Bottle Beverage" },
   { value: "Container - Bottle Chemical", label: "Container - Bottle Chemical" },
   { value: "Container - Bottle Food", label: "Container - Bottle Food" },
+  { value: "Container - Jug", label: "Container - Jug" },
   { value: "Container - Jug Beverage", label: "Container - Jug Beverage" },
   { value: "Container - Jug Chemical", label: "Container - Jug Chemical" },
+  { value: "Container - Can", label: "Container - Can" },
   { value: "Container - Can Food Can", label: "Container - Can Food Can" },
   { value: "Container - Can Beverage Can", label: "Container - Can Beverage Can" },
   { value: "Container - Can Pressurized Can", label: "Container - Can Pressurized Can" },
@@ -32,11 +35,21 @@ const shapeOptions = [
 
   // Bag
   { value: "Bag - Shopping Bag", label: "Bag - Shopping Bag" },
+  { value: "Bag - Shipping Bag", label: "Bag - Shipping Bag" },
   { value: "Bag - Food Bag", label: "Bag - Food Bag" },
   { value: "Bag - Other", label: "Bag - Other" },
 
   // Book
   { value: "Book - Book", label: "Book - Book" },
+
+  { value: "Utensil - Utensil", label: "Utensil - Utensil" },
+  { value: "Plate - Plate", label: "Plate - Plate" },
+
+  { value: "Clothing - Clothing", label: "Clothing - Clothing" },
+  { value: "Clothing - Shoe", label: "Clothing - Shoe" },
+
+    // Ball
+  { value: "Ball - Ball", label: "Ball - Ball" },
 
   // Lid
   { value: "Lid - Cup Lid", label: "Lid - Cup Lid" },
@@ -48,6 +61,8 @@ const shapeOptions = [
 
   // Box
   { value: "Box - Box", label: "Box - Box" },
+  { value: "Box - Food", label: "Box - Food" },
+  { value: "Box - Shipping", label: "Box - Shipping" },
 
   // Wrapper
   { value: "Wrapper - Wrapper", label: "Wrapper - Wrapper" },
@@ -66,6 +81,9 @@ const shapeOptions = [
 
   // Foil
   { value: "Foil - Foil", label: "Foil - Foil" },
+
+  { value: "Mail - Mail", label: "Mail - Mail" },
+  { value: "Mail - Envelope", label: "Mail - Envelope" },
 
   // Other
   { value: "Other", label: "Other" },

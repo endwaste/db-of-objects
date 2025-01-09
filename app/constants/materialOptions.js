@@ -15,8 +15,10 @@ const materialOptions = [
   { value: "Rigid Plastic - PS", label: "Rigid Plastic - PS" },
   { value: "Rigid Plastic - PP", label: "Rigid Plastic - PP" },
   { value: "Rigid Plastic - Other", label: "Rigid Plastic - Other" },
+  { value: "Plastic - Other", label: "Plastic - Other" },
 
   // Ferrous Metal
+
   { value: "Ferrous Metal - Steel", label: "Ferrous Metal - Steel" },
   { value: "Ferrous Metal - Iron", label: "Ferrous Metal - Iron" },
   { value: "Ferrous Metal - Other", label: "Ferrous Metal - Other" },
@@ -27,6 +29,7 @@ const materialOptions = [
   { value: "Non-Ferrous Metal - Brass", label: "Non-Ferrous Metal - Brass" },
   { value: "Non-Ferrous Metal - Tin", label: "Non-Ferrous Metal - Tin" },
   { value: "Non-Ferrous Metal - Other", label: "Non-Ferrous Metal - Other" },
+  { value: "Metal - Other", label: "Metal - Other" },
 
   // E-Waste
   { value: "E-Waste - E-Waste", label: "E-Waste - E-Waste" },
@@ -40,16 +43,20 @@ const materialOptions = [
   // Carton
   { value: "Carton - Aseptic Carton", label: "Carton - Aseptic Carton" },
   { value: "Carton - Gable Top Carton", label: "Carton - Gable Top Carton" },
+  { value: "Carton - Other", label: "Carton - Other" },
 
   // Wood
   { value: "Wood - Wood", label: "Wood - Wood" },
+
+  // Glass
+  { value: "Glass - Glass", label: "Glass - Glass" },
 
   // Flexible Fiber
   { value: "Flexible Fiber - Paper", label: "Flexible Fiber - Paper" },
   { value: "Flexible Fiber - Paper Newspaper", label: "Flexible Fiber - Paper Newspaper" },
   { value: "Flexible Fiber - Paper Office Paper", label: "Flexible Fiber - Paper Office Paper" },
   { value: "Flexible Fiber - Paper Magazine", label: "Flexible Fiber - Paper Magazine" },
-  { value: "Flexible Fiber - Paper Packaging Paper", label: "Flexible Fiber - Paper Packaging Paper" },
+  { value: "Flexible Fiber - Tissue", label: "Flexible Fiber - Tissue" },
   { value: "Flexible Fiber - Other", label: "Flexible Fiber - Other" },
 
   // Rigid Fiber
@@ -58,9 +65,7 @@ const materialOptions = [
   { value: "Rigid Fiber - Paperboard", label: "Rigid Fiber - Paperboard" },
   { value: "Rigid Fiber - Cardstock", label: "Rigid Fiber - Cardstock" },
   { value: "Rigid Fiber - Other", label: "Rigid Fiber - Other" },
-
-  // Mail
-  { value: "Mail - Envelope", label: "Mail - Envelope" },
+  { value: "Fiber - Other", label: "Fiber - Other" },
 
   // Bio
   { value: "Bio - Food", label: "Bio - Food" },
@@ -68,7 +73,7 @@ const materialOptions = [
   { value: "Bio - Other", label: "Bio - Other" },
 
   // Glass
-  { value: "Glass - Glass", label: "Glass - Glass" },
+  { value: "Other", label: "Other" },
 ];
 
 export default materialOptions;
