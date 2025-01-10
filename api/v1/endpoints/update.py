@@ -21,12 +21,9 @@ async def update_metadata(
     shape: Union[str, None] = Form(""),
     comment: Union[str, None] = Form(""),
     modifier: Union[str, None] = Form(""),
+    labeler_name: Union[str, None] = Form(""),
 ):
     """Update metadata for an existing entry in Pinecone and the CSV in S3."""
-    logger.info(f"Received PUT request to update metadata for ID: {embedding_id}")
-    logger.info(
-        f"Request parameters - Color: {color}, Material: {material}, Brand: {brand}, Shape: {shape}, Comment: {comment}, Modifier: {modifier}"
-    )
 
     try:
         current_metadata, current_vector = await fetch_metadata_from_pinecone(
@@ -42,6 +39,7 @@ async def update_metadata(
             "shape": shape,
             "comment": comment,
             "modifier": modifier,
+            "labeler_name": labeler_name,
             "original_s3_uri": current_metadata["original_s3_uri"],
             "s3_file_path": current_metadata["s3_file_path"],
             "coordinates": current_metadata["coordinates"],
@@ -111,12 +109,6 @@ async def update_pinecone(
         raise HTTPException(
             status_code=500, detail=f"Error updating Pinecone: {str(e)}"
         )
-
-
-import csv
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 async def update_csv_in_s3(updated_metadata: dict):

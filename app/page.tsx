@@ -58,6 +58,7 @@ interface Result {
     robot?: string;
     shape?: string;
     comment?: string;
+    labeler_name?: string;
     timestamp?: string;
   };
 }

@@ -29,6 +29,7 @@ interface Result {
     robot?: string;
     shape?: string;
     comment?: string;
+    labeler_name?: string;
     timestamp?: string;
   };
 }
@@ -121,6 +122,7 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                 "Form Factor": result.metadata.shape,
                 Brand: result.metadata.brand,
                 Modifier: result.metadata.modifier,
+                "Labeler's name": result.metadata.labeler_name,
               };
 
               const otherMetadata = Object.entries(result.metadata).filter(
@@ -135,6 +137,7 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                     "shape",
                     "brand",
                     "modifier",
+                    "labeler_name",
                   ].includes(key) && value
               );
 

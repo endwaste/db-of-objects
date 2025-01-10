@@ -74,6 +74,7 @@ async def query_image(file: UploadFile = File(...)):
                         "robot": metadata.get("robot"),
                         "shape": metadata.get("shape"),
                         "comment": metadata.get("comment"),
+                        "labeler_name": metadata.get("labeler_name"),
                         "timestamp": metadata.get("timestamp"),
                         "whole_image_presigned_url": settings.generate_presigned_url(
                             metadata.get("original_s3_uri")

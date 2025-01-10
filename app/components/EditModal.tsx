@@ -31,6 +31,7 @@ const EditModal: React.FC<EditModalProps> = ({
         material: "",
         shape: "",
         comment: "",
+        labeler_name: "",
     });
     const [isUpdating, setIsUpdating] = useState(false);
     const [isCustomBrand, setIsCustomBrand] = useState(false);
@@ -47,6 +48,7 @@ const EditModal: React.FC<EditModalProps> = ({
                 material: metadata.material || "",
                 shape: metadata.shape || "",
                 comment: metadata.comment || "",
+                labeler_name: metadata.labeler_name || "",
             });
             setIsCustomBrand(!brandOptions.some(option => option.value === metadata.brand));
         }
@@ -277,6 +279,19 @@ const EditModal: React.FC<EditModalProps> = ({
                             value={editMetadata.comment}
                             onChange={handleInputChange}
                             placeholder="Enter comment"
+                            className="block w-full mt-1 p-2 border rounded"
+                        />
+                    </div>
+
+                    {/* Labeler Name */}
+                    <div>
+                        <label className="block text-sm font-medium">Labeler's name</label>
+                        <input
+                            type="text"
+                            name="labeler_name"
+                            value={editMetadata.labeler_name}
+                            onChange={handleInputChange}
+                            placeholder="Enter your name"
                             className="block w-full mt-1 p-2 border rounded"
                         />
                     </div>

@@ -38,6 +38,7 @@ async def add_new_data(
     s3_file_path: Optional[str] = Form(None),
     coordinates: Optional[Union[List[float], str]] = Form(None),
     comment: Optional[str] = Form(None),
+    labeler_name: Optional[str] = Form(None),
     modifier: Optional[str] = Form(None),
 ):
     """
@@ -127,6 +128,7 @@ async def add_new_data(
             "datetime_taken": datetime_taken,
             "file_type": "image",
             "comment": comment,
+            "labeler_name": labeler_name,
             "modifier": modifier,
         }
         metadata = {
