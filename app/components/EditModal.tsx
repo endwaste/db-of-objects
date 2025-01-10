@@ -285,7 +285,7 @@ const EditModal: React.FC<EditModalProps> = ({
 
                     {/* Labeler Name */}
                     <div>
-                        <label className="block text-sm font-medium">Labeler's name</label>
+                        <label className="block text-sm font-medium">Labeler&apos;s name</label>
                         <input
                             type="text"
                             name="labeler_name"

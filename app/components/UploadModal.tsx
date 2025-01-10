@@ -411,7 +411,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                         </div>
 
                         <div className="mt-4">
-                            <label className="block mb-2 text-sm font-medium text-gray-700">Labeler's name</label>
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Labeler&apos;s name</label>
                             <input
                                 type="text"
                                 name="labeler_name"
@@ -464,7 +464,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                             <p><strong>Material:</strong> {uploadResult.material || "N/A"}</p>
                             <p><strong>Brand:</strong> {uploadResult.brand || "N/A"}</p>
                             <p><strong>Form Factor:</strong> {uploadResult.shape || "N/A"}</p>
-                            <p><strong>Labeler's name:</strong> {uploadResult.labeler_name || "N/A"}</p>
+                            <p><strong>Labeler&apos;s name:</strong> {uploadResult.labeler_name || "N/A"}</p>
                             <p><strong>Modifier:</strong> {uploadResult.modifier || "N/A"}</p>
                             <p><strong>Comment:</strong> {uploadResult.comment || "N/A"}</p>
                             <p><strong>Timestamp:</strong> {uploadResult.timestamp || "N/A"}</p>
