@@ -31,6 +31,7 @@ interface Result {
     comment?: string;
     labeler_name?: string;
     timestamp?: string;
+    pick_point?: string;
   };
 }
 
@@ -141,6 +142,20 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                   ].includes(key) && value
               );
 
+              let px: number | null = null;
+              let py: number | null = null;
+              if (result.metadata.pick_point) {
+                if (typeof result.metadata.pick_point === "string") {
+                  const [xStr, yStr] = result.metadata.pick_point.split(",");
+                  px = parseFloat(xStr.trim());
+                  py = parseFloat(yStr.trim());
+                }
+                if (Array.isArray(result.metadata.pick_point)) {
+                  px = result.metadata.pick_point[0];
+                  py = result.metadata.pick_point[1];
+                }
+              }
+
               return (
                 <div key={videoId} className="relative group rounded-md overflow-hidden">
                   {/* Action Buttons */}
@@ -155,22 +170,42 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
 
                   {/* Display Image */}
                   <div className="relative">
-                    <Image
+                  <Image
                       src={result.metadata.s3_presigned_url}
                       alt="Result"
                       className="w-full h-auto object-cover rounded"
-                      width="640"
-                      height="360"
+                      width={640}
+                      height={360}
                     />
-                    {/* Similarity Score */}
+                    {/* Overlaid similarity score */}
                     <div className="absolute bottom-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-md shadow-md">
                       {roundedScore}
                     </div>
+                    {/* If pick_point is valid, show a red cross */}
+                    {px !== null && py !== null && !isNaN(px) && !isNaN(py) && (
+                      <div
+                        className="absolute text-red-600 font-bold select-none"
+                        style={{
+                          left: `${px * 100}%`,
+                          top: `${py * 100}%`,
+                          transform: "translate(-50%, -50%)",
+                          pointerEvents: "none",
+                          fontSize: "1.25rem",
+                        }}
+                      >
+                        +
+                      </div>
+                    )}
                     {/* View Whole Image Button */}
                     {result.metadata.whole_image_presigned_url && (
                       <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                         <button
-                          onClick={() => openWholeImage(result.metadata.whole_image_presigned_url || '', result.metadata.coordinates)}
+                          onClick={() =>
+                            openWholeImage(
+                              result.metadata.whole_image_presigned_url || "",
+                              result.metadata.coordinates
+                            )
+                          }
                           className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md shadow-md hover:bg-blue-700 focus:outline-none"
                         >
                           View Whole Image

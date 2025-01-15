@@ -37,6 +37,7 @@ async def add_new_data(
     original_s3_uri: Optional[str] = Form(None),
     s3_file_path: Optional[str] = Form(None),
     coordinates: Optional[Union[List[float], str]] = Form(None),
+    pick_point: Union[List[float], str] = Form(...),
     comment: Optional[str] = Form(None),
     labeler_name: Optional[str] = Form(None),
     modifier: Optional[str] = Form(None),
@@ -44,14 +45,16 @@ async def add_new_data(
     """
     Add new data to Pinecone and update metadata CSV in S3.
     """
+    if not pick_point:
+        raise HTTPException(status_code=400, detail="pick_point is required.")
+
     logger.info(
-        f"Received POST request with color={color}, material={material}, brand={brand}, shape={shape} and modifier={modifier}"
+        f"Received POST request with pick point ={pick_point}"
     )
     logger.info("Starting new data entry processing...")
     try:
         image_contents = await image.read()
         extracted_metadata = extract_metadata_from_user_comment(image_contents)
-        logger.info(f"Extracted metadata: {extracted_metadata}")
         image_embeddings = await generate_image_embeddings(image_contents)
 
         original_s3_uri = extracted_metadata.get("original_s3_uri") or original_s3_uri
@@ -62,14 +65,12 @@ async def add_new_data(
         whole_image_presigned_url = settings.generate_presigned_url(original_s3_uri)
 
         if not original_s3_uri:
-            logger.error("original_s3_uri is missing.")
             raise HTTPException(
                 status_code=400,
                 detail="original_s3_uri is required either in the request or in the image metadata.",
             )
 
         if not s3_file_path:
-            logger.error("s3_file_path is missing.")
             raise HTTPException(
                 status_code=400,
                 detail="s3_file_path is required either in the request or in the image metadata.",
@@ -77,7 +78,6 @@ async def add_new_data(
 
         if isinstance(coordinates, str):
             try:
-                logger.info(f"Parsing coordinates: {coordinates}")
                 coordinates = [float(x.strip()) for x in coordinates.split(",")]
             except ValueError:
                 logger.error(f"Invalid coordinate format: {coordinates}")
@@ -86,11 +86,28 @@ async def add_new_data(
                     detail="Coordinates must be a list of floats or a comma-separated string.",
                 )
 
+        if isinstance(pick_point, str):
+            try:
+                pick_point = [float(x.strip()) for x in pick_point.split(",")]
+            except ValueError:
+                logger.error(f"Invalid coordinate format: {pick_point}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Pick point must be a list of floats or a comma-separated string.",
+                )
+
         if not coordinates or len(coordinates) != 4:
             logger.error(f"Invalid coordinates: {coordinates}")
             raise HTTPException(
                 status_code=400,
                 detail="Coordinates must be an array or string of 4 float values.",
+            )
+
+        if not pick_point or len(pick_point) != 2:
+            logger.error(f"Invalid pick point: {pick_point}")
+            raise HTTPException(
+                status_code=400,
+                detail="Pick point must be an array or string of 4 float values.",
             )
 
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -130,6 +147,7 @@ async def add_new_data(
             "comment": comment,
             "labeler_name": labeler_name,
             "modifier": modifier,
+            "pick_point": pick_point,
         }
         metadata = {
             key: (value if value is not None else "") for key, value in metadata.items()
@@ -321,6 +339,7 @@ def save_to_pinecone(embeddings, metadata):
             raise ValueError("Embedding ID is missing in metadata.")
 
         metadata["coordinates"] = ",".join(map(str, metadata["coordinates"]))
+        metadata["pick_point"] = ",".join(map(str, metadata["pick_point"]))
 
         vector = [
             {
@@ -348,16 +367,11 @@ def append_metadata_to_s3(metadata: dict) -> None:
     Args:
         metadata (dict): A dictionary containing metadata fields.
     """
-    logger.info("Appending metadata to CSV in S3...")
-
     s3_client = settings.get_s3_client()
     bucket_name = settings.s3_bucket_name
     csv_key = "universal-db/metadata.csv"
 
     try:
-        logger.info(
-            f"Checking if the CSV exists in S3: bucket={bucket_name}, key={csv_key}"
-        )
         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=csv_key)
         file_exists = "Contents" in response
         logger.info(f"File exists in S3: {file_exists}")
@@ -389,6 +403,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
                             "comment",
                             "modifier",
                             "status",
+                            "pick_point",
                         ]
                     )
 
@@ -410,13 +425,13 @@ def append_metadata_to_s3(metadata: dict) -> None:
                         metadata.get("comment", ""),
                         metadata.get("modifier", ""),
                         metadata.get("status", ""),
+                        metadata.get("pick_point", ""),
                     ]
                 )
                 logger.info(
                     "Appended new metadata to the temporary CSV file, including embedding ID."
                 )
 
-            # Upload the updated CSV back to S3
             logger.info(
                 f"Uploading updated CSV back to S3: bucket={bucket_name}, key={csv_key}"
             )

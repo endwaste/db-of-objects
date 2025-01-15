@@ -51,6 +51,7 @@ interface Result {
     modifier?: string;
     color?: string;
     coordinates?: string;
+    pick_point?: string;
     datetime_taken?: string;
     embedding_id?: string;
     material?: string;

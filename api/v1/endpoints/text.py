@@ -55,6 +55,7 @@ async def query_text(query: TextQuery):
                         ),
                         "brand": metadata.get("brand"),
                         "modifier": metadata.get("modifier"),
+                        "pick_point": metadata.get("pick_point"),
                         "color": metadata.get("color"),
                         "coordinates": metadata.get("coordinates"),
                         "datetime_taken": metadata.get("datetime_taken"),

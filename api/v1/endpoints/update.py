@@ -22,6 +22,7 @@ async def update_metadata(
     comment: Union[str, None] = Form(""),
     modifier: Union[str, None] = Form(""),
     labeler_name: Union[str, None] = Form(""),
+    pick_point: Union[str, None] = Form(""),
 ):
     """Update metadata for an existing entry in Pinecone and the CSV in S3."""
 
@@ -48,6 +49,7 @@ async def update_metadata(
             "datetime_taken": current_metadata["datetime_taken"],
             "file_type": current_metadata["file_type"],
             "embedding_id": embedding_id,
+            "pick_point": pick_point,
         }
 
         await update_pinecone(embedding_id, updated_metadata, current_vector)
@@ -162,6 +164,9 @@ async def update_csv_in_s3(updated_metadata: dict):
                             )
                             row["status"] = updated_metadata.get(
                                 "status", row.get("status", "")
+                            )
+                            row["pick_point"] = updated_metadata.get(
+                                "pick_point", row.get("pick_point", "")
                             )
                         updated_rows.append(row)
 

@@ -42,6 +42,9 @@ const UploadModal: React.FC<UploadModalProps> = ({
     const modifierDropdownRef = useRef<HTMLDivElement>(null);
     const [isModifierDropdownOpen, setIsModifierDropdownOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [pickPoint, setPickPoint] = useState<[number, number] | null>(null);
+    const [showPickPointModal, setShowPickPointModal] = useState(false);
+
 
 
     // Hide modifier dropdown on outside click
@@ -133,34 +136,39 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
     const handleSubmit = async () => {
         if (!file) {
-            setErrorMessage("Please select a file to upload.");
-            return;
+          setErrorMessage("Please select a file to upload.");
+          return;
         }
-
+      
         setIsUploading(true);
-        setErrorMessage(null); // Clear previous errors
+        setErrorMessage(null);
         setUploadStatus(null);
-
+        setPickPoint(null);
+      
         const formData = new FormData();
         formData.append("image", file);
+      
         Object.entries(metadata).forEach(([key, value]) => {
-            if (value) formData.append(key, value);
+          if (value) formData.append(key, value);
         });
-
-        try {
-            const response = await axios.post(`${apiUrl}/new`, formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
-
-            setUploadResult(response.data.metadata);
-
-        } catch (error) {
-            console.error("Upload error:", error);
-            setErrorMessage("Upload failed. Please try again.");
-        } finally {
-            setIsUploading(false);
+      
+        if (pickPoint) {
+          formData.append("pick_point", `${pickPoint[0]},${pickPoint[1]}`);
         }
-    };
+      
+        try {
+          const response = await axios.post(`${apiUrl}/new`, formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          setUploadResult(response.data.metadata);
+        } catch (error) {
+          console.error("Upload error:", error);
+          setErrorMessage("Upload failed. Please try again.");
+        } finally {
+          setIsUploading(false);
+        }
+      };
+      
 
     const handleUndo = async (id: string) => {
         try {
@@ -183,6 +191,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
             labeler_name: "",
         });
         setFile(null);
+        setPickPoint(null);
         setImageUrl(null);
         setPresignedUrl(null);
         setErrorMessage(null);
@@ -227,32 +236,66 @@ const UploadModal: React.FC<UploadModalProps> = ({
                             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                         />
                         {/* Add this below the file input to display the image preview */}
-                        {imageUrl && (
-                            <div className="mt-4">
-                                <h3 className="text-sm font-medium text-gray-700">Image Preview</h3>
-                                <Image
-                                    src={imageUrl}
-                                    alt="Preview"
-                                    width={400}
-                                    height={400}
-                                    className="w-48 h-auto mt-2 rounded-lg"
-                                />
+                        <div className="relative inline-block mt-2">
+                            {imageUrl && (
+                                <div className="mt-4">
+                                    <h3 className="text-sm font-medium text-gray-700">Image Preview</h3>
+                                    <div className="relative" style={{ width: "192px", height: "auto" }}>
+                                    <Image
+                                        src={imageUrl}
+                                        alt="Preview"
+                                        width={400}  // or 192
+                                        height={400} // or remove entirely, or use layout="responsive"
+                                        className="rounded-lg"
+                                    />
+                                    {pickPoint && (
+                                        <div
+                                        className="absolute text-red-500 font-bold"
+                                        style={{
+                                            left: `${pickPoint[0] * 100}%`,
+                                            top: `${pickPoint[1] * 100}%`,
+                                            transform: "translate(-50%, -50%)",
+                                            pointerEvents: "none",
+                                        }}
+                                        >
+                                        +
+                                        </div>
+                                    )}
+                                    </div>
+                                </div>
+                            
+                                )}
+                            <div className="mt-2 flex space-x-2">
+                                {/* "Select pick point" button with CTA style */}
+                                {imageUrl && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPickPointModal(true)}
+                                        className="py-1 px-3 text-sm rounded border border-transparent 
+                                                bg-blue-600 text-white hover:bg-blue-700 
+                                                focus:outline-none focus:ring-2 focus:ring-blue-500 
+                                                focus:ring-offset-2"
+                                    >
+                                        {pickPoint ? "Re-select pick point" : "Select pick point"}
+                                    </button>
+                                )}
+
+                                {/* Google lens URL */}
+                                {presignedUrl && (
+                                    <a
+                                        href={`https://lens.google.com/uploadbyurl?url=${encodeURIComponent(presignedUrl)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="py-1 px-3 text-sm rounded border border-transparent 
+                                            bg-blue-600 text-white hover:bg-blue-700 
+                                            focus:outline-none focus:ring-2 focus:ring-blue-500 
+                                            focus:ring-offset-2 flex items-center"
+                                    >
+                                        Search in Google Lens
+                                    </a>
+                                )}
                             </div>
-                        )}
-                        {/* Presigned URL */}
-                        {presignedUrl && (
-                            <div className="mt-4">
-                                <h3 className="text-sm font-medium"></h3>
-                                <a
-                                    href={`https://lens.google.com/uploadbyurl?url=${encodeURIComponent(presignedUrl)}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 underline"
-                                >
-                                    Search in Google Lens
-                                </a>
-                            </div>
-                        )}
+                        </div>
 
 
                         {/* Dropdowns */}
@@ -449,14 +492,34 @@ const UploadModal: React.FC<UploadModalProps> = ({
                     /* Render Upload Summary */
                     <>
                         <h2 className="text-xl font-semibold mb-4">Upload Summary</h2>
-                        {/* Display Uploaded Image */}
-                        <Image
+
+                        {/* Wrap the Image in a relative container */}
+                        <div className="relative w-full h-auto mb-4">
+                            <Image
                             src={uploadResult.presigned_url}
                             alt="Uploaded"
-                            width={400}
-                            height={400}
-                            className="w-full h-auto mb-4 rounded"
-                        />
+                            width={350}
+                            height={350}
+                            className="w-full h-auto rounded"
+                            />
+                            {/* If we have a pick_point, parse and render the cross */}
+                            {uploadResult.pick_point && (() => {
+                            const [px, py] = uploadResult.pick_point.split(",").map(Number);
+                            return (
+                                <div
+                                className="absolute text-red-500 font-bold"
+                                style={{
+                                    left: `${px * 100}%`,
+                                    top: `${py * 100}%`,
+                                    transform: "translate(-50%, -50%)",
+                                    pointerEvents: "none",
+                                }}
+                                >
+                                +
+                                </div>
+                            );
+                            })()}
+                        </div>
 
                         {/* Display Metadata */}
                         <div className="text-sm text-gray-700 space-y-2">
@@ -470,24 +533,62 @@ const UploadModal: React.FC<UploadModalProps> = ({
                             <p><strong>Timestamp:</strong> {uploadResult.timestamp || "N/A"}</p>
                             <p><strong>Robot:</strong> {uploadResult.robot || "N/A"}</p>
                             <p><strong>Date Taken:</strong> {uploadResult.datetime_taken || "N/A"}</p>
+                            <p><strong>Pick Point:</strong> {uploadResult.pick_point || "N/A"}</p>
                         </div>
+
                         <div className="mt-6 flex justify-end space-x-4">
                             <button
-                                onClick={() => handleUndo(uploadResult.embedding_id)} // Pass the ID to the undo handler
-                                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300"
+                            onClick={() => handleUndo(uploadResult.embedding_id)}
+                            className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300"
                             >
-                                Undo
+                            Undo
                             </button>
                             <button
-                                onClick={handleClose}
-                                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300"
+                            onClick={handleClose}
+                            className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300"
                             >
-                                Close
+                            Close
                             </button>
                         </div>
-                    </>
+                        </>
+
                 )}
             </div>
+            {showPickPointModal && imageUrl && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
+                    <div className="relative">
+                    {/* Close Button */}
+                    <button
+                        onClick={() => setShowPickPointModal(false)}
+                        className="absolute top-2 right-2 z-10 bg-gray-200 rounded px-2 py-1"
+                    >
+                        X
+                    </button>
+
+                    {/* Large Image */}
+                    <img
+                        src={imageUrl}
+                        alt="Select Pick Point"
+                        onClick={(event) => {
+                        const rect = (event.target as HTMLImageElement).getBoundingClientRect();
+
+                        const x = (event.clientX - rect.left) / rect.width;   // 0..1
+                        const y = (event.clientY - rect.top) / rect.height;  // 0..1
+                        console.log("Pick point selected:", [x, y]);
+
+                        setPickPoint([x, y]);
+
+                        setShowPickPointModal(false);
+                        }}
+                        className="max-w-[80vw] max-h-[80vh] object-contain cursor-crosshair"
+                    />
+                    <p className="text-white mt-2 text-center">
+                        Click on the image to select the pick point
+                    </p>
+                    </div>
+                </div>
+                )}
+
         </div >
     );
 };
