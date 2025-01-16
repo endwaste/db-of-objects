@@ -254,21 +254,37 @@ const EditModal: React.FC<EditModalProps> = ({
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {/* Image & pick point overlay */}
             {imageUrl ? (
-              <div className="relative" style={{ width: "auto", height: "auto" }}>
+              <div className="relative" style={{ display: 'inline-block', width: '100%' }}>
                 <img
                   src={imageUrl}
                   alt="Preview"
-                  className="w-full h-auto rounded"
-                />
+                  style={{ objectFit: 'contain', maxWidth: '100%', height: 'auto' }}
+                  className="rounded"
+                  ref={(img) => {
+                    if (img && pickPoint) {
+                      const rect = img.getBoundingClientRect();
+                      const imgHeight = img.naturalHeight;
+                      const imgWidth = img.naturalWidth;
 
+                      // Adjust crosshair positioning using the image dimensions
+                      const crosshair = document.querySelector('.crosshair') as HTMLElement;
+                      if (crosshair) {
+                        crosshair.style.left = `${pickPoint[0] * imgWidth}px`;
+                        crosshair.style.top = `${pickPoint[1] * imgHeight}px`;
+                      }
+                    }
+                  }}
+                />
                 {pickPoint && (
-                    <div
-                        className="crosshair"
-                        style={{
-                            left: `${pickPoint[0] * 100}%`,
-                            top: `${pickPoint[1] * 100}%`,
-                        }}
-                    />
+                  <div
+                    className="crosshair"
+                    style={{
+                      position: 'absolute',
+                      left: `${pickPoint[0] * 100}%`,
+                      top: `${pickPoint[1] * 100}%`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                  />
                 )}
                 <button
                   type="button"
