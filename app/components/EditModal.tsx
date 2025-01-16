@@ -266,7 +266,20 @@ const EditModal: React.FC<EditModalProps> = ({
                       const imgHeight = img.naturalHeight;
                       const imgWidth = img.naturalWidth;
 
-                      // Adjust crosshair positioning using the image dimensions
+                      const crosshair = document.querySelector('.crosshair') as HTMLElement;
+                      if (crosshair) {
+                        crosshair.style.left = `${pickPoint[0] * imgWidth}px`;
+                        crosshair.style.top = `${pickPoint[1] * imgHeight}px`;
+                      }
+                    }
+                  }}
+                  onLoad={(e) => {
+                    const img = e.target as HTMLImageElement;
+                    if (img && pickPoint) {
+                      const rect = img.getBoundingClientRect();
+                      const imgHeight = img.naturalHeight;
+                      const imgWidth = img.naturalWidth;
+
                       const crosshair = document.querySelector('.crosshair') as HTMLElement;
                       if (crosshair) {
                         crosshair.style.left = `${pickPoint[0] * imgWidth}px`;
@@ -275,6 +288,7 @@ const EditModal: React.FC<EditModalProps> = ({
                     }
                   }}
                 />
+
                 {pickPoint && (
                   <div
                     className="crosshair"
