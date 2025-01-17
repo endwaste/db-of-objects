@@ -1,7 +1,6 @@
 "use client";
 
 import axios from "axios";
-import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 
 import brandOptions from "@/app/constants/brandOptions";
@@ -44,7 +43,7 @@ const EditModal: React.FC<EditModalProps> = ({
   // For the modifier dropdown
   const modifierDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Image & pick point
+  // Image & pick point (store as [xFraction, yFraction])
   const [imageUrl, setImageUrl] = useState<string>("");
   const [pickPoint, setPickPoint] = useState<[number, number] | null>(null);
   const [showPickPointModal, setShowPickPointModal] = useState(false);
@@ -65,9 +64,11 @@ const EditModal: React.FC<EditModalProps> = ({
       comment: metadata.comment || "",
       labeler_name: metadata.labeler_name || "",
     });
-    setIsCustomBrand(!brandOptions.some((option) => option.value === metadata.brand));
+    setIsCustomBrand(
+      !brandOptions.some((option) => option.value === metadata.brand)
+    );
 
-    // If there's a pick_point, parse it to [x, y]
+    // Convert existing pick_point to fraction-based
     if (metadata.pick_point) {
       if (typeof metadata.pick_point === "string") {
         const [xStr, yStr] = metadata.pick_point.split(",");
@@ -75,6 +76,8 @@ const EditModal: React.FC<EditModalProps> = ({
         const py = parseFloat(yStr.trim());
         if (!isNaN(px) && !isNaN(py)) {
           setPickPoint([px, py]);
+        } else {
+          setPickPoint(null);
         }
       } else if (Array.isArray(metadata.pick_point)) {
         setPickPoint([metadata.pick_point[0], metadata.pick_point[1]]);
@@ -117,14 +120,15 @@ const EditModal: React.FC<EditModalProps> = ({
     setEditMetadata({ ...editMetadata, [e.target.name]: e.target.value });
   };
 
-  const handleModifierDropdownToggle = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleModifierDropdownToggle = (
+    e: React.MouseEvent<HTMLButtonElement>
+  ) => {
     e.stopPropagation();
     const dropdown = modifierDropdownRef.current;
     if (dropdown) {
       dropdown.classList.toggle("hidden");
     }
   };
-  
 
   const handleModifierChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedOptions = editMetadata.modifier
@@ -158,7 +162,6 @@ const EditModal: React.FC<EditModalProps> = ({
     setShowPickPointModal(true);
   };
 
-
   // --------------------------------------------------------------------------
   // Submit "Update"
   // --------------------------------------------------------------------------
@@ -172,6 +175,7 @@ const EditModal: React.FC<EditModalProps> = ({
         formData.append(key, value);
       });
       if (pickPoint) {
+        // store as "x,y" fraction
         formData.append("pick_point", `${pickPoint[0]},${pickPoint[1]}`);
       }
 
@@ -202,39 +206,39 @@ const EditModal: React.FC<EditModalProps> = ({
   return (
     <>
       <style jsx global>{`
-                .crosshair {
-                    position: absolute;
-                    width: 0;
-                    height: 0;
-                    transform: translate(-50%, -50%);
-                    pointer-events: none;
-                }
-                .crosshair::before,
-                .crosshair::after {
-                    content: "";
-                    position: absolute;
-                    background: red;
-                }
-                /* Thicker lines (2px) but shorter length (10px) */
-                .crosshair::before {
-                    width: 2px;
-                    height: 10px;
-                    left: -1px;  /* half of 2px */
-                    top: -5px;   /* half of 10px */
-                }
-                .crosshair::after {
-                    width: 10px;
-                    height: 2px;
-                    top: -1px;   /* half of 2px */
-                    left: -5px;  /* half of 10px */
-                }
+        .crosshair {
+          position: absolute;
+          width: 0;
+          height: 0;
+          transform: translate(-50%, -50%);
+          pointer-events: none;
+        }
+        .crosshair::before,
+        .crosshair::after {
+          content: "";
+          position: absolute;
+          background: red;
+        }
+        /* Make the crosshair symmetrical: 2px wide, 10px tall. */
+        .crosshair::before {
+          width: 2px;
+          height: 10px;
+          left: -1px;
+          top: -5px;
+        }
+        .crosshair::after {
+          width: 10px;
+          height: 2px;
+          top: -1px;
+          left: -5px;
+        }
       `}</style>
-      
+
       <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
         <div
           className="
             bg-white w-full max-w-md 
-            max-h-[90vh]  /* <--- limit total modal height to 90% of viewport */
+            max-h-[90vh]
             rounded-lg shadow-lg 
             flex flex-col overflow-hidden p-2 relative
           "
@@ -252,54 +256,40 @@ const EditModal: React.FC<EditModalProps> = ({
 
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Image & pick point overlay */}
             {imageUrl ? (
-              <div className="relative" style={{ display: 'inline-block', width: '100%' }}>
-                <img
-                  src={imageUrl}
-                  alt="Preview"
-                  style={{ objectFit: 'contain', maxWidth: '100%', height: 'auto' }}
-                  className="rounded"
-                  ref={(img) => {
-                    if (img && pickPoint) {
-                      const rect = img.getBoundingClientRect();
-                      const imgHeight = img.naturalHeight;
-                      const imgWidth = img.naturalWidth;
-
-                      const crosshair = document.querySelector('.crosshair') as HTMLElement;
-                      if (crosshair) {
-                        crosshair.style.left = `${pickPoint[0] * imgWidth}px`;
-                        crosshair.style.top = `${pickPoint[1] * imgHeight}px`;
-                      }
-                    }
-                  }}
-                  onLoad={(e) => {
-                    const img = e.target as HTMLImageElement;
-                    if (img && pickPoint) {
-                      const rect = img.getBoundingClientRect();
-                      const imgHeight = img.naturalHeight;
-                      const imgWidth = img.naturalWidth;
-
-                      const crosshair = document.querySelector('.crosshair') as HTMLElement;
-                      if (crosshair) {
-                        crosshair.style.left = `${pickPoint[0] * imgWidth}px`;
-                        crosshair.style.top = `${pickPoint[1] * imgHeight}px`;
-                      }
-                    }
-                  }}
-                />
-
-                {pickPoint && (
-                  <div
-                    className="crosshair"
+              <>
+                {/* 
+                  1) Use a BLOCK container (no inline baseline offset).
+                  2) position: relative so crosshair is anchored to this box.
+                  3) lineHeight: 0 to avoid any stray text-baseline spacing.
+                */}
+                <div
+                  className="relative block"
+                  style={{ margin: 0, padding: 0, lineHeight: 0 }}
+                >
+                  <img
+                    src={imageUrl}
+                    alt="Preview"
                     style={{
-                      position: 'absolute',
-                      left: `${pickPoint[0] * 100}%`,
-                      top: `${pickPoint[1] * 100}%`,
-                      transform: 'translate(-50%, -50%)',
+                      objectFit: "contain",
+                      display: "block",
+                      width: "100%",
+                      height: "auto",
+                      verticalAlign: "top",
                     }}
                   />
-                )}
+                  {pickPoint && (
+                    <div
+                      className="crosshair"
+                      style={{
+                        left: `${pickPoint[0] * 100}%`,
+                        top: `${pickPoint[1] * 100}%`,
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Place the button BELOW the container, so it doesn't affect boundingRect */}
                 <button
                   type="button"
                   onClick={handleSelectPickPoint}
@@ -307,11 +297,9 @@ const EditModal: React.FC<EditModalProps> = ({
                 >
                   {pickPoint ? "Re-select pick point" : "Select pick point"}
                 </button>
-              </div>
+              </>
             ) : (
-              <p className="text-sm text-gray-600">
-                No preview available. 
-              </p>
+              <p className="text-sm text-gray-600">No preview available.</p>
             )}
 
             {/* Brand */}
@@ -448,7 +436,9 @@ const EditModal: React.FC<EditModalProps> = ({
 
             {/* Labeler Name */}
             <div>
-              <label className="block text-sm font-medium">Labeler&apos;s name</label>
+              <label className="block text-sm font-medium">
+                Labeler&apos;s name
+              </label>
               <input
                 type="text"
                 name="labeler_name"
@@ -467,7 +457,10 @@ const EditModal: React.FC<EditModalProps> = ({
                 {errorMessage}
               </div>
             )}
-            <button onClick={handleClose} className="px-4 py-2 bg-gray-200 rounded">
+            <button
+              onClick={handleClose}
+              className="px-4 py-2 bg-gray-200 rounded"
+            >
               Cancel
             </button>
             <button
@@ -491,22 +484,27 @@ const EditModal: React.FC<EditModalProps> = ({
                   src={imageUrl}
                   alt="Select Pick Point"
                   onClick={(event) => {
-                      const rect = (event.target as HTMLImageElement).getBoundingClientRect();
-                      const x = (event.clientX - rect.left) / rect.width;
-                      const y = (event.clientY - rect.top) / rect.height;
-                      console.log("Pick point selected:", [x, y]);
+                    // 1) Get bounding rect in the displayed coordinate space
+                    const img = event.currentTarget;
+                    const rect = img.getBoundingClientRect();
 
-                      setPickPoint([x, y]);
-                      setShowPickPointModal(false);
+                    // 2) Translate the click to fractions [0..1, 0..1]
+                    const xFraction = (event.clientX - rect.left) / rect.width;
+                    const yFraction = (event.clientY - rect.top) / rect.height;
+
+                    // 3) Store those fractions
+                    setPickPoint([xFraction, yFraction]);
+                    setShowPickPointModal(false);
                   }}
                   style={{
-                      width: "auto",
-                      height: "auto",
-                      maxWidth: "90vw",
-                      maxHeight: "90vh",
-                      objectFit: "contain",
+                    width: "auto",
+                    height: "auto",
+                    maxWidth: "90vw",
+                    maxHeight: "90vh",
+                    objectFit: "contain",
+                    cursor: "crosshair",
+                    display: "block",
                   }}
-                  className="cursor-crosshair"
                 />
                 <p className="text-white mt-2 text-center">
                   Click on the image to select the pick point
@@ -514,8 +512,6 @@ const EditModal: React.FC<EditModalProps> = ({
               </div>
             </div>
           )}
-
-
         </div>
       </div>
     </>
