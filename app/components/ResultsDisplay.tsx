@@ -174,7 +174,7 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
               return (
                 <div key={videoId} className="relative group rounded-md overflow-hidden">
                   {/* Action Buttons */}
-                  <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 mt-4 mr-4 ml-4">
+                  <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 mt-2 mr-2 ml-2">
                     <button onClick={() => handleEdit(result.metadata)} className="text-blue-500 hover:text-blue-700">
                       <PencilIcon className="w-5 h-5" />
                     </button>
@@ -187,8 +187,8 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                   </div>
 
                   {/* Display Image & Score & Red Cross (with letterboxing logic) */}
-                  <div className="bg-white rounded-md shadow-md overflow-hidden flex flex-col m-2">
-                    <div className="mt-4 mr-4 ml-4">
+                  <div className="bg-white rounded-md shadow-md overflow-hidden flex flex-col">
+                    <div className="mt-3 mr-3 ml-3">
                       <ImageContainer
                         imageUrl={result.metadata.s3_presigned_url}
                         score={roundedScore}
