@@ -82,7 +82,9 @@ export default function Home() {
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editMetadata, setEditMetadata] = useState<Record<string, any> | null>(null);
-
+  const [currentPage, setCurrentPage] = useState(1);
+  const resultsPerPage = 30;
+  
   const openEditModal = (metadata: any) => {
     setEditMetadata(metadata);
     setIsEditModalOpen(true);
@@ -106,6 +108,11 @@ export default function Home() {
     setShowSuggestions(false);
   };
 
+  const paginatedResults = filteredResults.slice(
+    (currentPage - 1) * resultsPerPage,
+    currentPage * resultsPerPage
+  );  
+
   const clearResults = () => {
     setQuery('');
     setResults([]);
@@ -123,20 +130,24 @@ export default function Home() {
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
 
+  const totalPages = Math.ceil(filteredResults.length / resultsPerPage);
 
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage((prev) => prev + 1);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage((prev) => prev - 1);
+    }
+  };
 
   useEffect(() => {
-    let scrollTracked = false;
-    const handleScroll = () => {
-      const scrollPercentage = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
-      if (scrollPercentage > 50 && !scrollTracked) {
-        track('scroll_depth', { depth: '50%' });
-        scrollTracked = true;
-      }
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+    window.scrollTo(0, 0);
+  }, [currentPage]);
+
 
   useEffect(() => {
     const pageViewData = {
@@ -219,6 +230,7 @@ export default function Home() {
     setSearchTime(null);
     setSearchType(null);
     setErrorMessage(null);
+    setCurrentPage(1);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -338,10 +350,8 @@ export default function Home() {
         onDrop={handleDrop}
         style={{ fontFamily: "'Inter', 'Helvetica', 'Arial', sans-serif" }}
       >
-        <div className="max-w-6xl w-full px-4 md:px-0 mt-12">
+        <div className="max-w-8xl w-full px-8 md:px-12 mt-10 mx-auto">
           <Header />
-
-
 
           <div className="max-w-xl mx-auto relative ">
 
@@ -403,7 +413,7 @@ export default function Home() {
 
           <div>
             {isSearchComplete && searchTime !== null && totalVectors !== null && (
-              <div className="ml-1 mt-6 mb-2 flex items-center text-left text-gray-700">
+              <div className="ml-2 mt-6 mb-4 flex items-center text-left text-gray-700">
                 <p>
                   Searched {totalVectors.toLocaleString()} objects
                   {searchType === 'text' && (
@@ -454,11 +464,88 @@ export default function Home() {
             <ResultsDisplay
               apiUrl={`${API_URL}/api`}
               isLoadingResults={isLoadingResults}
-              results={filteredResults}
+              results={paginatedResults}
               getScoreLabel={getScoreLabel}
               getVideoId={getVideoId}
               onEdit={openEditModal}
             />
+            {results.length > 0 && (
+              <div className="flex justify-center mt-4 space-x-2">
+              {/* Previous Button */}
+              <button
+                className={`px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 ${
+                  currentPage === 1 ? 'cursor-not-allowed opacity-50' : ''
+                }`}
+                onClick={handlePreviousPage}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </button>
+            
+              {/* First Page Button */}
+              {currentPage > 3 && (
+                <>
+                  <button
+                    className="px-3 py-1 text-sm rounded-lg bg-gray-200 hover:bg-gray-300"
+                    onClick={() => setCurrentPage(1)}
+                  >
+                    1
+                  </button>
+                  <span className="px-2 text-gray-500">...</span>
+                </>
+              )}
+            
+              {/* Dynamic Page Numbers */}
+              {Array.from(
+                { length: Math.min(5, totalPages) }, // Show up to 5 pages
+                (_, index) => {
+                  const page = currentPage - 2 + index;
+                  if (page > 0 && page <= totalPages) {
+                    return (
+                      <button
+                        key={page}
+                        className={`px-3 py-1 text-sm rounded-lg ${
+                          currentPage === page
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 hover:bg-gray-300'
+                        }`}
+                        onClick={() => setCurrentPage(page)}
+                      >
+                        {page}
+                      </button>
+                    );
+                  }
+                  return null;
+                }
+              )}
+            
+              {/* Last Page Button */}
+              {currentPage < totalPages - 2 && (
+                <>
+                  <span className="px-2 text-gray-500">...</span>
+                  <button
+                    className="px-3 py-1 text-sm rounded-lg bg-gray-200 hover:bg-gray-300"
+                    onClick={() => setCurrentPage(totalPages)}
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+            
+              {/* Next Button */}
+              <button
+                className={`px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 ${
+                  currentPage === totalPages ? 'cursor-not-allowed opacity-50' : ''
+                }`}
+                onClick={handleNextPage}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+            
+            )}
+
           </div>
         </div>
 

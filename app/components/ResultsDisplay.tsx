@@ -1,7 +1,7 @@
 import { ChevronDownIcon, ChevronUpIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/solid";
 import axios from "axios";
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import WholeImageViewer from "./WholeImageViewer";
 
 interface Result {
@@ -89,8 +89,27 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
     setSelectedCoordinates(null);
   };
 
+  // Helper function to parse pick_point into numeric [x, y]
+  function parsePickPoint(pickPoint: string | string[] | undefined): [number, number] | null {
+    if (!pickPoint) return null;
+    if (typeof pickPoint === "string") {
+      const [xStr, yStr] = pickPoint.split(",");
+      const px = parseFloat(xStr.trim());
+      const py = parseFloat(yStr.trim());
+      if (!isNaN(px) && !isNaN(py)) return [px, py];
+      return null;
+    }
+    if (Array.isArray(pickPoint) && pickPoint.length === 2) {
+      const px = parseFloat(pickPoint[0]);
+      const py = parseFloat(pickPoint[1]);
+      if (!isNaN(px) && !isNaN(py)) return [px, py];
+      return null;
+    }
+    return null;
+  }
+
   return (
-    <div>
+    <div className="w-full">
       {/* Success Message */}
       {successMessage && (
         <div className="bg-green-500 text-white p-2 rounded mb-4">
@@ -100,23 +119,26 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
 
       {/* Loading State */}
       {isLoadingResults ? (
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(20)].map((_, index) => (
-            <div key={index} className="animate-pulse">
-              <div className="bg-gray-300 h-64 w-full rounded-sm"></div>
-              <div className="h-4 bg-gray-300 rounded w-3/4 mt-2"></div>
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1">
+            {[...Array(20)].map((_, index) => (
+              <div key={index} className="animate-pulse">
+                <div className="bg-gray-300 h-64 w-full rounded-md"></div>
+                <div className="h-4 bg-gray-300 rounded w-3/4 mt-2"></div>
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         results.length > 0 && (
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1">
             {results.map((result, index) => {
               const { score } = getScoreLabel(result.score);
               const roundedScore = parseFloat(score).toFixed(3); // Round to 3 decimal places
               const videoId = getVideoId(result, index);
               const metadataId = result.metadata.embedding_id || `${index}`;
 
+              // We highlight a few metadata fields first:
               const prioritizedMetadata: Record<string, string | undefined> = {
                 Color: result.metadata.color,
                 Material: result.metadata.material,
@@ -126,6 +148,7 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                 "Labeler's name": result.metadata.labeler_name,
               };
 
+              // The rest goes under "Show More"
               const otherMetadata = Object.entries(result.metadata).filter(
                 ([key, value]) =>
                   ![
@@ -142,98 +165,80 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                   ].includes(key) && value
               );
 
-              let px: number | null = null;
-              let py: number | null = null;
-              if (result.metadata.pick_point) {
-                if (typeof result.metadata.pick_point === "string") {
-                  const [xStr, yStr] = result.metadata.pick_point.split(",");
-                  px = parseFloat(xStr.trim());
-                  py = parseFloat(yStr.trim());
-                }
-                if (Array.isArray(result.metadata.pick_point)) {
-                  px = result.metadata.pick_point[0];
-                  py = result.metadata.pick_point[1];
-                }
-              }
+              // We'll parse the pick_point once:
+              const pickPoint = parsePickPoint(result.metadata.pick_point);
+              const px = pickPoint ? pickPoint[0] : null;
+              const py = pickPoint ? pickPoint[1] : null;
 
+              // Each card rendering:
               return (
                 <div key={videoId} className="relative group rounded-md overflow-hidden">
                   {/* Action Buttons */}
-                  <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 mt-4 mr-4 ml-4">
                     <button onClick={() => handleEdit(result.metadata)} className="text-blue-500 hover:text-blue-700">
                       <PencilIcon className="w-5 h-5" />
                     </button>
-                    <button onClick={() => handleDelete(result.metadata.embedding_id || "")} className="text-red-500 hover:text-red-700">
+                    <button
+                      onClick={() => handleDelete(result.metadata.embedding_id || "")}
+                      className="text-red-500 hover:text-red-700"
+                    >
                       <TrashIcon className="w-5 h-5" />
                     </button>
                   </div>
 
-                  {/* Display Image */}
-                  <div className="relative">
-                  <Image
-                      src={result.metadata.s3_presigned_url}
-                      alt="Result"
-                      className="w-full h-auto object-cover rounded"
-                      width={640}
-                      height={360}
-                    />
-                    {/* Overlaid similarity score */}
-                    <div className="absolute bottom-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-md shadow-md">
-                      {roundedScore}
+                  {/* Display Image & Score & Red Cross (with letterboxing logic) */}
+                  <div className="bg-white rounded-md shadow-md overflow-hidden flex flex-col m-2">
+                    <div className="mt-4 mr-4 ml-4">
+                      <ImageContainer
+                        imageUrl={result.metadata.s3_presigned_url}
+                        score={roundedScore}
+                        px={px}
+                        py={py}
+                        wholeImageUrl={result.metadata.whole_image_presigned_url}
+                        coordinates={result.metadata.coordinates}
+                        onViewWholeImage={() =>
+                          openWholeImage(
+                            result.metadata.whole_image_presigned_url || "",
+                            result.metadata.coordinates
+                          )
+                        }
+                      />
                     </div>
-                    {/* If pick_point is valid, show a red cross */}
-                    {px !== null && py !== null && !isNaN(px) && !isNaN(py) && (
-                      <div
-                        className="absolute text-red-600 font-bold select-none"
-                        style={{
-                          left: `${px * 100}%`,
-                          top: `${py * 100}%`,
-                          transform: "translate(-50%, -50%)",
-                          pointerEvents: "none",
-                          fontSize: "1.25rem",
-                        }}
-                      >
-                        +
-                      </div>
-                    )}
-                    {/* View Whole Image Button */}
-                    {result.metadata.whole_image_presigned_url && (
-                      <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        <button
-                          onClick={() =>
-                            openWholeImage(
-                              result.metadata.whole_image_presigned_url || "",
-                              result.metadata.coordinates
-                            )
-                          }
-                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md shadow-md hover:bg-blue-700 focus:outline-none"
-                        >
-                          View Whole Image
-                        </button>
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Metadata */}
-                  <div className="mt-4 p-4 bg-white shadow-md rounded-md text-gray-800 text-xs">
-                    {Object.entries(prioritizedMetadata).map(([key, value]) =>
-                      value ? (
-                        <p key={key} className="mb-2">
-                          <strong>{key}:</strong> {value}
-                        </p>
-                      ) : null
-                    )}
-
-                    {showMore[metadataId] &&
-                      otherMetadata.map(([key, value]) => (
-                        <p key={key} className="mb-2">
-                          <strong>{key}:</strong> {value}
+                    {/* Metadata */}
+                    <div
+                      className={`p-4 text-gray-800 text-xs overflow-hidden transition-all duration-300 ${
+                        showMore[metadataId] ? "h-auto" : "h-35"
+                      }`}
+                    >
+                      {Object.entries(prioritizedMetadata).map(([key, value]) => (
+                        <p key={key} className="mb-2 truncate">
+                          <strong>{key}:</strong> {value || "-"}
                         </p>
                       ))}
 
-                    <button onClick={() => toggleShowMore(metadataId)} className="mt-4 text-blue-500 hover:text-blue-700 flex items-center">
-                      {showMore[metadataId] ? <>Show Less <ChevronUpIcon className="w-4 h-4 ml-1" /></> : <>Show More <ChevronDownIcon className="w-4 h-4 ml-1" /></>}
-                    </button>
+                      {showMore[metadataId] &&
+                        otherMetadata.map(([key, value]) => (
+                          <p key={key} className="mb-2">
+                            <strong>{key}:</strong> {value}
+                          </p>
+                        ))}
+
+                      <button
+                        onClick={() => toggleShowMore(metadataId)}
+                        className="mt-4 text-blue-500 hover:text-blue-700 flex items-center"
+                      >
+                        {showMore[metadataId] ? (
+                          <>
+                            Show Less <ChevronUpIcon className="w-4 h-4 ml-1" />
+                          </>
+                        ) : (
+                          <>
+                            Show More <ChevronDownIcon className="w-4 h-4 ml-1" />
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -244,7 +249,7 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
 
       {selectedWholeImage && (
         <WholeImageViewer
-          imageUrl={selectedWholeImage || ''}
+          imageUrl={selectedWholeImage || ""}
           coordinates={selectedCoordinates || undefined}
           onClose={closeWholeImage}
         />
@@ -254,3 +259,142 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
 };
 
 export default ResultsDisplay;
+
+/**
+ * A separate component to handle the forced 4:3 box,
+ * the `object-contain` letterboxing,
+ * and placing the red cross using normalized pick_point.
+ */
+interface ImageContainerProps {
+  imageUrl: string;
+  score: string;
+  px: number | null;
+  py: number | null;
+  wholeImageUrl?: string;
+  coordinates?: string;
+  onViewWholeImage: () => void;
+}
+
+const ImageContainer: React.FC<ImageContainerProps> = ({
+  imageUrl,
+  score,
+  px,
+  py,
+  wholeImageUrl,
+  coordinates,
+  onViewWholeImage,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState({
+    containerWidth: 0,
+    containerHeight: 0,
+    imgWidth: 0,
+    imgHeight: 0,
+  });
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Once the image has loaded, measure the container (fixed 4:3 box).
+  useEffect(() => {
+    if (!imageLoaded || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setDims((prev) => ({
+      ...prev,
+      containerWidth: rect.width,
+      containerHeight: rect.height,
+    }));
+  }, [imageLoaded]);
+
+  // Calculate where the cross should go, accounting for letterboxing.
+  let crossLeft = 0;
+  let crossTop = 0;
+  const { containerWidth, containerHeight, imgWidth, imgHeight } = dims;
+
+  if (
+    imgWidth > 0 &&
+    imgHeight > 0 &&
+    containerWidth > 0 &&
+    containerHeight > 0 &&
+    px !== null &&
+    py !== null
+  ) {
+    const containerAspect = containerWidth / containerHeight;
+    const imageAspect = imgWidth / imgHeight;
+    let renderedWidth = 0;
+    let renderedHeight = 0;
+
+    if (imageAspect > containerAspect) {
+      // image is "wider" => fill container width
+      renderedWidth = containerWidth;
+      renderedHeight = (containerWidth / imgWidth) * imgHeight;
+    } else {
+      // image is "taller" => fill container height
+      renderedHeight = containerHeight;
+      renderedWidth = (containerHeight / imgHeight) * imgWidth;
+    }
+    // The leftover space on the sides or top/bottom is letterboxed
+    const offsetX = (containerWidth - renderedWidth) / 2;
+    const offsetY = (containerHeight - renderedHeight) / 2;
+
+    crossLeft = offsetX + px * renderedWidth;
+    crossTop = offsetY + py * renderedHeight;
+  }
+
+  return (
+    <div ref={containerRef} className="relative overflow-hidden" style={{ aspectRatio: "4/3" }}>
+      <Image
+        src={imageUrl}
+        alt="Result"
+        className="absolute top-0 left-0 w-full h-full object-contain"
+        width={640}
+        height={480}
+        onLoadingComplete={(img) => {
+          // Store the image's natural dimensions
+          const { naturalWidth, naturalHeight } = img;
+          setDims((prev) => {
+            if (prev.imgWidth !== naturalWidth || prev.imgHeight !== naturalHeight) {
+              return {
+                ...prev,
+                imgWidth: naturalWidth,
+                imgHeight: naturalHeight,
+              };
+            }
+            return prev;
+          });
+          setImageLoaded(true);
+        }}
+      />
+
+      {/* Overlaid similarity score */}
+      <div className="absolute bottom-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-md shadow-md">
+        {score}
+      </div>
+
+      {/* Red cross if pick point is valid */}
+      {px !== null && py !== null && !isNaN(px) && !isNaN(py) && (
+        <div
+          className="absolute text-red-600 font-bold select-none"
+          style={{
+            left: crossLeft,
+            top: crossTop,
+            transform: "translate(-50%, -50%)",
+            pointerEvents: "none",
+            fontSize: "1.25rem",
+          }}
+        >
+          +
+        </div>
+      )}
+
+      {wholeImageUrl && (
+        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          <button
+            onClick={onViewWholeImage}
+            className="px-2 py-1 bg-blue-600 text-white text-xs rounded-md shadow-md hover:bg-blue-700 focus:outline-none"
+          >
+            View whole image
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
