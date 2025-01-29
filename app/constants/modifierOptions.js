@@ -7,7 +7,8 @@ const modifierOptions = [
   { value: "flattened", label: "Flattened" },
   { value: "rigid", label: "Rigid" },
   { value: "partially_covered", label: "Partially Covered" },
-  { value: "printed", label: "Printed" }
+  { value: "printed", label: "Printed" },
+  { value: "difficult", label: "Difficult" },
 ];
 
 export default modifierOptions;

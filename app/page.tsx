@@ -7,6 +7,7 @@ import Header from './components/Header';
 import ResultsDisplay from './components/ResultsDisplay';
 import SearchForm from './components/SearchForm';
 import UploadModal from './components/UploadModal';
+import FilterPanel from './components/FilterPanel';
 
 import { track } from '@vercel/analytics';
 import axios from 'axios';
@@ -84,6 +85,11 @@ export default function Home() {
   const [editMetadata, setEditMetadata] = useState<Record<string, any> | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const resultsPerPage = 30;
+  const [selectedMaterial, setSelectedMaterial] = useState<string>('');
+  const [selectedBrand, setSelectedBrand] = useState<string>('');
+  const [selectedShape, setSelectedShape] = useState<string>('');
+  const [selectedColor, setSelectedColor] = useState<string>('');
+  const [selectedLabeler, setSelectedLabeler] = useState<string>('');
   
   const openEditModal = (metadata: any) => {
     setEditMetadata(metadata);
@@ -94,9 +100,25 @@ export default function Home() {
   };
   const router = useRouter();
 
-  const filteredResults = selectedClass
-    ? results.filter(result => result.metadata.class === selectedClass)
-    : results;
+  const filteredResults = results.filter(result => {
+    const m = result.metadata.material ?? '';
+    const b = result.metadata.brand ?? '';
+    const s = result.metadata.shape ?? '';
+    const col = result.metadata.color ?? '';
+    const lab = result.metadata.labeler_name ?? '';
+
+    const passMaterial = selectedMaterial === '' || m === selectedMaterial;
+    const passBrand = selectedBrand === '' || b === selectedBrand;
+    const passShape = selectedShape === '' || s === selectedShape;
+    const passColor = selectedColor === '' || col === selectedColor;
+    const passLabeler = selectedLabeler === '' || lab === selectedLabeler;
+
+    return passMaterial && passBrand && passShape && passColor && passLabeler;
+  });
+
+  // const filteredResults = selectedClass
+  //   ? results.filter(result => result.metadata.class === selectedClass)
+  //   : results;
   const suggestions = [
     "red coke can",
     "green plastic",
@@ -113,6 +135,33 @@ export default function Home() {
     currentPage * resultsPerPage
   );  
 
+  const materialOptions = Array.from(new Set(results.map(r => r.metadata.material).filter(Boolean))) as string[];
+  const brandOptions = Array.from(new Set(results.map(r => r.metadata.brand).filter(Boolean))) as string[];
+  const shapeOptions = Array.from(new Set(results.map(r => r.metadata.shape).filter(Boolean))) as string[];
+  const colorOptions = Array.from(new Set(results.map(r => r.metadata.color).filter(Boolean))) as string[];
+  const labelerOptions = Array.from(new Set(results.map(r => r.metadata.labeler_name).filter(Boolean))) as string[];
+
+  const handleMaterialChange = (value: string) => {
+    setSelectedMaterial(value);
+    setCurrentPage(1);
+  };
+  const handleBrandChange = (value: string) => {
+    setSelectedBrand(value);
+    setCurrentPage(1);
+  };
+  const handleShapeChange = (value: string) => {
+    setSelectedShape(value);
+    setCurrentPage(1);
+  };
+  const handleColorChange = (value: string) => {
+    setSelectedColor(value);
+    setCurrentPage(1);
+  };
+  const handleLabelerChange = (value: string) => {
+    setSelectedLabeler(value);
+    setCurrentPage(1);
+  };
+
   const clearResults = () => {
     setQuery('');
     setResults([]);
@@ -120,7 +169,24 @@ export default function Home() {
     setIsSearchComplete(false);
     setSearchTime(null);
     setSearchType(null);
+
+    setSelectedMaterial('');
+    setSelectedBrand('');
+    setSelectedShape('');
+    setSelectedColor('');
+    setSelectedLabeler('');
+    setSelectedClass('');
+
     setErrorMessage(null);
+  };
+
+  const clearAllFilters = () => {
+    setSelectedMaterial('');
+    setSelectedBrand('');
+    setSelectedShape('');
+    setSelectedColor('');
+    setSelectedLabeler('');
+    setCurrentPage(1);
   };
 
   const playersRef = useRef<{ [key: string]: VideoJsPlayer }>({});
@@ -411,6 +477,8 @@ export default function Home() {
             </div>
           )}
 
+        
+
           <div>
             {isSearchComplete && searchTime !== null && totalVectors !== null && (
               <div className="ml-2 mt-6 mb-4 flex items-center text-left text-gray-700">
@@ -461,6 +529,30 @@ export default function Home() {
                 </button>
               </div>
             )}
+            {/* Show filter panel only if we have results */}
+            <div className='ml-2'>
+              {results.length > 0 && (
+              <FilterPanel
+                materialOptions={materialOptions}
+                brandOptions={brandOptions}
+                shapeOptions={shapeOptions}
+                colorOptions={colorOptions}
+                labelerOptions={labelerOptions}
+                selectedMaterial={selectedMaterial}
+                selectedBrand={selectedBrand}
+                selectedShape={selectedShape}
+                selectedColor={selectedColor}
+                selectedLabeler={selectedLabeler}
+                onMaterialChange={handleMaterialChange}
+                onBrandChange={handleBrandChange}
+                onShapeChange={handleShapeChange}
+                onColorChange={handleColorChange}
+                onLabelerChange={handleLabelerChange}
+                onClearFilters={clearAllFilters}
+              />
+            )}
+            </div>
+          
             <ResultsDisplay
               apiUrl={`${API_URL}/api`}
               isLoadingResults={isLoadingResults}

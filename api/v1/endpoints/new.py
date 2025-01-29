@@ -6,7 +6,7 @@ import torch
 import csv
 import tempfile
 from api.config import settings
-from api.model_loader import get_model
+from api.model_loader import get_clip_model
 from api import deps
 from datetime import datetime, timezone
 from pinecone import Pinecone
@@ -24,7 +24,7 @@ index = settings.get_pinecone_index()
 
 router = APIRouter()
 
-model, device, preprocess = get_model()
+model, device, preprocess = get_clip_model()
 
 
 @router.post("/new")

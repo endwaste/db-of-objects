@@ -8,11 +8,11 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from api.config import settings
 from api import deps
 from PIL import Image
-from api.model_loader import get_model
+from api.model_loader import get_clip_model
 
 router = APIRouter()
 
-model, device, preprocess = get_model()
+model, device, preprocess = get_clip_model()
 
 
 def extract_frames(video_path, interval_sec=15, num_frames=8):
