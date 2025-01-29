@@ -1,6 +1,6 @@
 import torch
 import clip
-from ultralytics import YOLO
+# from ultralytics import YOLO
 from api.config import settings
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -20,13 +20,13 @@ def get_clip_model():
 
     return model, device, preprocess
 
-def get_detect_anything_model():
-    bucket_name = "glacier-ml-training"
-    object_key = "artifacts/dev/DETECT-ANYTHING/YOLOV11M_1280/cleaned/best.pt"
-    local_path = "/tmp/ultralytics_weights.pt"
+# def get_detect_anything_model():
+#     bucket_name = "glacier-ml-training"
+#     object_key = "artifacts/dev/DETECT-ANYTHING/YOLOV11M_1280/cleaned/best.pt"
+#     local_path = "/tmp/ultralytics_weights.pt"
 
-    s3_client = settings.get_s3_client()
-    s3_client.download_file(bucket_name, object_key, local_path)
+#     s3_client = settings.get_s3_client()
+#     s3_client.download_file(bucket_name, object_key, local_path)
 
-    detect_model = YOLO(local_path).to(device)
-    return detect_model
+#     detect_model = YOLO(local_path).to(device)
+#     return detect_model
