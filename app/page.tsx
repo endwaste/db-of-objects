@@ -108,14 +108,16 @@ export default function Home() {
     const s = result.metadata.shape ?? '';
     const col = result.metadata.color ?? '';
     const lab = result.metadata.labeler_name ?? '';
+    const robot = result.metadata.robot ?? '';
 
     const passMaterial = selectedMaterial === '' || m === selectedMaterial;
     const passBrand = selectedBrand === '' || b === selectedBrand;
     const passShape = selectedShape === '' || s === selectedShape;
     const passColor = selectedColor === '' || col === selectedColor;
     const passLabeler = selectedLabeler === '' || lab === selectedLabeler;
+    const passRobot = !exclude_robots.includes(robot);
 
-    return passMaterial && passBrand && passShape && passColor && passLabeler;
+    return passMaterial && passBrand && passShape && passColor && passLabeler && passRobot;
   });
 
   const suggestions = [
@@ -528,7 +530,6 @@ export default function Home() {
                 </button>
               </div>
             )}
-            {/* Show filter panel only if we have results */}
             <div className='ml-2'>
               {results.length > 0 && (
               <FilterPanel
@@ -537,7 +538,6 @@ export default function Home() {
                 shapeOptions={shapeOptions}
                 colorOptions={colorOptions}
                 labelerOptions={labelerOptions}
-                excludedRobots={exclude_robots}
                 selectedMaterial={selectedMaterial}
                 selectedBrand={selectedBrand}
                 selectedShape={selectedShape}
