@@ -8,7 +8,7 @@
     "next-dev": "npm install && next dev",
     "dev": "concurrently \"npm run next-dev\" \"npm run fastapi-dev\"",
     "build": "next build",
-    "start": "concurrently \"next start\" \"npm run fastapi-prod\"",
+    "start": "concurrently \"next start -p 80\" \"npm run fastapi-prod\"",
     "lint": "next lint"
   },
   "dependencies": {
