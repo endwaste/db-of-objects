@@ -23,6 +23,8 @@ import './styles.css';
 import { handleFileUpload } from './components/FileUploadHandler';
 import Footer from './components/Footer';
 
+const exclude_robots = ['GEM-003', 'GEM-004', 'GEM-007', 'SCN-001', 'SCN-033', 'TST-001'];
+
 const API_URL = (() => {
   switch (process.env.NEXT_PUBLIC_VERCEL_ENV) {
     case "development":
@@ -116,9 +118,6 @@ export default function Home() {
     return passMaterial && passBrand && passShape && passColor && passLabeler;
   });
 
-  // const filteredResults = selectedClass
-  //   ? results.filter(result => result.metadata.class === selectedClass)
-  //   : results;
   const suggestions = [
     "red coke can",
     "green plastic",
@@ -538,6 +537,7 @@ export default function Home() {
                 shapeOptions={shapeOptions}
                 colorOptions={colorOptions}
                 labelerOptions={labelerOptions}
+                excludedRobots={exclude_robots}
                 selectedMaterial={selectedMaterial}
                 selectedBrand={selectedBrand}
                 selectedShape={selectedShape}
