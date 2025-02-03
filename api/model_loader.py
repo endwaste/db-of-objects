@@ -20,6 +20,10 @@ def get_clip_model():
 
     return model, device, preprocess
 
+
+model, device, preprocess = get_clip_model()
+
+
 # def get_detect_anything_model():
 #     bucket_name = "glacier-ml-training"
 #     object_key = "artifacts/dev/DETECT-ANYTHING/YOLOV11M_1280/cleaned/best.pt"

@@ -5,9 +5,8 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from api.config import settings
 from api import deps
 import tempfile
-from api.model_loader import get_clip_model
+from api.model_loader import model, device, preprocess
 
-model, device, preprocess = get_clip_model()
 
 router = APIRouter()
 

@@ -4,11 +4,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from api.config import settings
 from api import deps
-from api.model_loader import get_clip_model
+from api.model_loader import model, device
 
 router = APIRouter()
-
-model, device, preprocess = get_clip_model()
 
 
 class TextQuery(BaseModel):

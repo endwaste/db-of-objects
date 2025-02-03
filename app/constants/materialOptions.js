@@ -51,6 +51,9 @@ const materialOptions = [
   // Glass
   { value: "Glass - Glass", label: "Glass - Glass" },
 
+  // Fabric
+  { value: "Fabric - Fabric", label: "Fabric - Fabric" },
+
   // Flexible Fiber
   { value: "Flexible Fiber - Paper", label: "Flexible Fiber - Paper" },
   { value: "Flexible Fiber - Paper Newspaper", label: "Flexible Fiber - Paper Newspaper" },
