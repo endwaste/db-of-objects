@@ -16,6 +16,7 @@ import logging
 import piexif
 import piexif.helper
 import ast
+import requests
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,7 +28,8 @@ router = APIRouter()
 
 @router.post("/new")
 async def add_new_data(
-    image: UploadFile = File(...),
+    image: Optional[UploadFile] = File(None),
+    presigned_url: Optional[str] = Form(None),
     color: Optional[str] = Form(None),
     material: Optional[str] = Form(None),
     brand: Optional[str] = Form(None),
@@ -46,12 +48,33 @@ async def add_new_data(
     if not pick_point:
         raise HTTPException(status_code=400, detail="pick_point is required.")
 
+    if not image and not presigned_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Either 'image' file or 'presigned_url' must be provided."
+        )
+
     logger.info(
         f"Received POST request with pick point ={pick_point}"
     )
     logger.info("Starting new data entry processing...")
     try:
-        image_contents = await image.read()
+        if image:
+            logger.info("Reading image from UploadFile input...")
+            image_contents = await image.read()
+        else:
+            logger.info("No UploadFile provided. Using presigned_url...")
+            try:
+                r = requests.get(presigned_url)
+                r.raise_for_status()
+            except Exception as e:
+                logger.error(f"Failed to fetch image from presigned_url: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot fetch image from presigned_url: {str(e)}"
+                )
+            image_contents = r.content
+
         extracted_metadata = extract_metadata_from_user_comment(image_contents)
         image_embeddings = await generate_image_embeddings(image_contents)
 

@@ -9,6 +9,7 @@ from api.v1.endpoints import (
     update,
     upload,
     review,
+    labeling,
 )
 
 app = FastAPI()
@@ -39,3 +40,4 @@ app.include_router(delete.router, prefix="/api")
 app.include_router(update.router, prefix="/api")
 app.include_router(upload.router, prefix="/api")
 app.include_router(review.router, prefix="/api")
+app.include_router(labeling.router, prefix="/api")
