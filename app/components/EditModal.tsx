@@ -235,14 +235,9 @@ const EditModal: React.FC<EditModalProps> = ({
       `}</style>
 
       <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-        <div
-          className="
-            bg-white w-full max-w-md 
-            max-h-[90vh]
-            rounded-lg shadow-lg 
-            flex flex-col overflow-hidden p-2 relative
-          "
-        >
+        <div className="bg-white w-full max-w-md max-h-[90vh] rounded-lg shadow-lg flex flex-col overflow-hidden p-2 relative"
+>
+
           {/* Header */}
           <div className="p-4 flex justify-between items-center">
             <h2 className="text-xl font-semibold">Edit Image Metadata</h2>

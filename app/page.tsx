@@ -92,6 +92,7 @@ export default function Home() {
   const [selectedShape, setSelectedShape] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedLabeler, setSelectedLabeler] = useState<string>('');
+  const [selectedRobot, setSelectedRobot] = useState<string>('');
   
   const openEditModal = (metadata: any) => {
     setEditMetadata(metadata);
@@ -100,6 +101,16 @@ export default function Home() {
   const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedClass(e.target.value);
   };
+  const robotOptions = Array.from(
+    new Set(
+      results
+        .map(r => r.metadata.robot)
+        .filter(
+          (robot): robot is string => 
+            !!robot && !exclude_robots.includes(robot)
+        )
+    )
+  );
   const router = useRouter();
 
   const filteredResults = results.filter(result => {
@@ -109,15 +120,28 @@ export default function Home() {
     const col = result.metadata.color ?? '';
     const lab = result.metadata.labeler_name ?? '';
     const robot = result.metadata.robot ?? '';
-
+  
+    // Always skip excluded robots
+    const passNotExcluded = !exclude_robots.includes(robot);
+  
+    // If user has chosen a specific robot, enforce it:
+    const passRobotFilter = selectedRobot === '' || robot === selectedRobot;
+  
     const passMaterial = selectedMaterial === '' || m === selectedMaterial;
     const passBrand = selectedBrand === '' || b === selectedBrand;
     const passShape = selectedShape === '' || s === selectedShape;
     const passColor = selectedColor === '' || col === selectedColor;
     const passLabeler = selectedLabeler === '' || lab === selectedLabeler;
-    const passRobot = !exclude_robots.includes(robot);
-
-    return passMaterial && passBrand && passShape && passColor && passLabeler && passRobot;
+  
+    return (
+      passNotExcluded &&
+      passRobotFilter &&
+      passMaterial &&
+      passBrand &&
+      passShape &&
+      passColor &&
+      passLabeler
+    );
   });
 
   const suggestions = [
@@ -162,6 +186,10 @@ export default function Home() {
     setSelectedLabeler(value);
     setCurrentPage(1);
   };
+  const handleRobotChange = (value: string) => {
+    setSelectedRobot(value);
+    setCurrentPage(1);
+  };
 
   const clearResults = () => {
     setQuery('');
@@ -187,6 +215,7 @@ export default function Home() {
     setSelectedShape('');
     setSelectedColor('');
     setSelectedLabeler('');
+    setSelectedRobot('');
     setCurrentPage(1);
   };
 
@@ -549,6 +578,9 @@ export default function Home() {
                 onColorChange={handleColorChange}
                 onLabelerChange={handleLabelerChange}
                 onClearFilters={clearAllFilters}
+                robotOptions={robotOptions}
+                selectedRobot={selectedRobot}
+                onRobotChange={handleRobotChange}
               />
             )}
             </div>

@@ -17,6 +17,9 @@ interface FilterPanelProps {
   onColorChange: (value: string) => void;
   onLabelerChange: (value: string) => void;
   onClearFilters: () => void; // Must reset states in the parent
+  robotOptions: string[];
+  selectedRobot: string;
+  onRobotChange: (value: string) => void;
 }
 
 const FilterPanel: React.FC<FilterPanelProps> = ({
@@ -25,6 +28,9 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   shapeOptions,
   colorOptions,
   labelerOptions,
+  robotOptions,
+  selectedRobot,
+  onRobotChange,
   selectedMaterial,
   selectedBrand,
   selectedShape,
@@ -144,6 +150,30 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           ))}
         </select>
       </div>
+
+      {/* ROBOT filter */}
+      <div className="flex flex-col">
+        <label
+          htmlFor="filter-robot"
+          className="text-sm font-medium text-gray-600 mb-1"
+          >
+            Robot 
+        </label>
+        <select
+          id="filter-robot"
+          value={selectedRobot}
+          onChange={(e) => onRobotChange(e.target.value)}
+          className="block w-36 border border-gray-300 rounded-md px-2 py-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+        >
+          <option value="">All</option>
+          {robotOptions.map((robot) => (
+            <option key={robot} value={robot}>
+              {robot}
+            </option>
+          ))}
+        </select>
+      </div>
+
 
       {/* CLEAR ALL BUTTON */}
       <button

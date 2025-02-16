@@ -295,10 +295,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => setShowPickPointModal(true)}
-                                            className="py-1 px-3 text-sm rounded border border-transparent 
-                                                bg-blue-600 text-white hover:bg-blue-700 
-                                                focus:outline-none focus:ring-2 focus:ring-blue-500 
-                                                focus:ring-offset-2"
+                                            className="py-1 px-3 text-sm rounded border border-transparent bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                                         >
                                             {pickPoint
                                                 ? "Re-select pick point"
@@ -314,10 +311,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                                             )}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="py-1 px-3 text-sm rounded border border-transparent 
-                                                bg-blue-600 text-white hover:bg-blue-700 
-                                                focus:outline-none focus:ring-2 focus:ring-blue-500 
-                                                focus:ring-offset-2 flex items-center"
+                                            className="py-1 px-3 text-sm rounded border border-transparent bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center"
                                         >
                                             Search in Google Lens
                                         </a>

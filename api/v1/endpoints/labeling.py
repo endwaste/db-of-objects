@@ -1,3 +1,4 @@
+import ast
 import csv
 import datetime
 import logging
@@ -210,7 +211,14 @@ def similarity_search(payload: SimilarityRequest):
             try:
                 cleaned = raw_str.strip()
                 if cleaned.startswith("{") and cleaned.endswith("}"):
-                    incoming_crop_metadata = json.loads(cleaned)
+                    try:
+                        data = ast.literal_eval(cleaned)
+                        if isinstance(data, dict):
+                            incoming_crop_metadata = data
+                        else:
+                            incoming_crop_metadata = {}
+                    except Exception:
+                        incoming_crop_metadata = {}
                 else:
                     incoming_crop_metadata = {}
             except Exception:
