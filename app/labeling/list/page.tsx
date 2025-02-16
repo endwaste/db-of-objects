@@ -103,7 +103,7 @@ export default function CropListPage() {
       let incoming = { ...result.incoming_crop_metadata };
       const csvHadData = incoming && Object.keys(incoming).length > 0;
 
-      // If empty => copy from the similar crop's metadata (minus pick_point)
+      // If empty => copy from the similar crops metadata (minus pick_point)
       if (!csvHadData) {
         incoming = { ...result.similar_crop_metadata };
         delete incoming.pick_point;
@@ -339,7 +339,7 @@ export default function CropListPage() {
               <th style={{ padding: "8px" }}>Original S3 URI</th>
               <th style={{ padding: "8px" }}>Bounding Box</th>
               <th style={{ padding: "8px" }}>Labeled?</th>
-              <th style={{ padding: "8px" }}>Labeler's Name</th>
+              <th style={{ padding: "8px" }}>Labeler&apos;s Name</th>
             </tr>
           </thead>
           <tbody>
