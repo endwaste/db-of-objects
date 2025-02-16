@@ -95,23 +95,43 @@ export default function SimilarityModal({
 
   // Called from the MetadataForm for incoming
   function handleIncomingMetaChange(updated: Record<string, any>) {
+    if (!similarityData) return;
+
     onUpdateSimilarityData({
       ...similarityData,
+      crop_s3_uri: similarityData.crop_s3_uri ?? "",
+      crop_presigned_url: similarityData.crop_presigned_url ?? "",
+      similar_crop_s3_uri: similarityData.similar_crop_s3_uri ?? "",
+      similar_crop_presigned_url: similarityData.similar_crop_presigned_url ?? "",
+      similar_crop_metadata: similarityData.similar_crop_metadata ?? {},
+      score: similarityData.score ?? null,
+      embedding_id: similarityData.embedding_id ?? null,
       incoming_crop_metadata: updated,
     });
   }
 
   // Called from the MetadataForm for similar
   function handleSimilarMetaChange(updated: Record<string, any>) {
+    if (!similarityData) return;
+
     onUpdateSimilarityData({
       ...similarityData,
+      crop_s3_uri: similarityData.crop_s3_uri ?? "",
+      crop_presigned_url: similarityData.crop_presigned_url ?? "",
+      similar_crop_s3_uri: similarityData.similar_crop_s3_uri ?? "",
+      similar_crop_presigned_url: similarityData.similar_crop_presigned_url ?? "",
       similar_crop_metadata: updated,
+      score: similarityData.score ?? null,
+      embedding_id: similarityData.embedding_id ?? null,
+      incoming_crop_metadata: similarityData.incoming_crop_metadata ?? {},
     });
   }
 
-  // Handle click on the incoming image => set pick_point
+
+    // Handle click on the incoming image => set pick_point
   function handleIncomingImgClick(e: React.MouseEvent<HTMLImageElement>) {
-    if (!showIncomingOverlay) return;
+    if (!showIncomingOverlay || !similarityData) return;
+
     const rect = e.currentTarget.getBoundingClientRect();
     const xPos = e.clientX - rect.left;
     const yPos = e.clientY - rect.top;
@@ -120,6 +140,13 @@ export default function SimilarityModal({
 
     onUpdateSimilarityData({
       ...similarityData,
+      crop_s3_uri: similarityData.crop_s3_uri ?? "",
+      crop_presigned_url: similarityData.crop_presigned_url ?? "",
+      similar_crop_s3_uri: similarityData.similar_crop_s3_uri ?? "",
+      similar_crop_presigned_url: similarityData.similar_crop_presigned_url ?? "",
+      similar_crop_metadata: similarityData.similar_crop_metadata ?? {},
+      score: similarityData.score ?? null,
+      embedding_id: similarityData.embedding_id ?? null,
       incoming_crop_metadata: {
         ...similarityData.incoming_crop_metadata,
         pick_point: `${xFrac},${yFrac}`,
@@ -127,9 +154,11 @@ export default function SimilarityModal({
     });
   }
 
+
   // Handle click on the similar image => set pick_point
   function handleSimilarImgClick(e: React.MouseEvent<HTMLImageElement>) {
-    if (!showSimilarOverlay) return;
+    if (!showSimilarOverlay || !similarityData) return;
+
     const rect = e.currentTarget.getBoundingClientRect();
     const xPos = e.clientX - rect.left;
     const yPos = e.clientY - rect.top;
@@ -138,12 +167,20 @@ export default function SimilarityModal({
 
     onUpdateSimilarityData({
       ...similarityData,
+      crop_s3_uri: similarityData.crop_s3_uri ?? "",
+      crop_presigned_url: similarityData.crop_presigned_url ?? "",
+      similar_crop_s3_uri: similarityData.similar_crop_s3_uri ?? "",
+      similar_crop_presigned_url: similarityData.similar_crop_presigned_url ?? "",
       similar_crop_metadata: {
         ...similarityData.similar_crop_metadata,
         pick_point: `${xFrac},${yFrac}`,
       },
+      score: similarityData.score ?? null,
+      embedding_id: similarityData.embedding_id ?? null,
+      incoming_crop_metadata: similarityData.incoming_crop_metadata ?? {},
     });
   }
+
 
   // Crosshair styling
   function pickPointCrossStyle(pickPoint?: string): React.CSSProperties {
