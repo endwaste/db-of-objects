@@ -45,7 +45,7 @@ const SearchForm: React.FC<SearchFormProps> = ({
             value={query}
             onChange={handleInputChange}
             onFocus={handleFocus}
-            placeholder="Describe the object, or drag in an image or video"
+            placeholder="Describe the object, or drag in an image"
             className="w-full flex-grow px-6 py-3 text-gray-700 bg-transparent focus:outline-none"
             disabled={isUploading || isSearching}
           />
