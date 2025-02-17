@@ -26,8 +26,8 @@ interface SimilarityModalProps {
   showModal: boolean;
   similarityData: SimilarityResult | null;
 
-  // We need to know if the CSV had incoming data.
-  csvHadIncoming: boolean;
+  // We need to know if the Dynamo DB had incoming data.
+  dynamoDBHadIncoming: boolean;
 
   // These are fields for labeler's name, difficult
   labelerName: string;
@@ -58,7 +58,7 @@ const crossArmStyle: React.CSSProperties = {
 export default function SimilarityModal({
   showModal,
   similarityData,
-  csvHadIncoming,
+  dynamoDBHadIncoming,
   labelerName,
   setLabelerName,
   difficult,
@@ -86,8 +86,8 @@ export default function SimilarityModal({
     const { embedding_id, incoming_crop_metadata } = similarityData;
     if (embedding_id) {
       return { text: "Metadata from UDO", color: "green" };
-    } else if (csvHadIncoming) {
-      return { text: "Metadata from CSV", color: "orange" };
+    } else if (dynamoDBHadIncoming) {
+      return { text: "Metadata from Dynamo DB", color: "orange" };
     } else {
       return { text: "Metadata from similar crop", color: "purple" };
     }

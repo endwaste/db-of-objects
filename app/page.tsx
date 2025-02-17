@@ -8,6 +8,7 @@ import ResultsDisplay from './components/ResultsDisplay';
 import SearchForm from './components/SearchForm';
 import UploadModal from './components/UploadModal';
 import FilterPanel from './components/FilterPanel';
+import SlidingMenu from './components/SlidingMenu';
 
 import { track } from '@vercel/analytics';
 import axios from 'axios';
@@ -436,7 +437,7 @@ export default function Home() {
   return (
     <Layout>
       <Head>
-        <title>Universal Database of Images</title>
+        <title>Universal Database of Objects</title>
       </Head>
       <div
         className={`flex flex-col items-center justify-start min-h-screen bg-gray-100 ${dragging ? 'border-4 border-dashed border-blue-500' : ''
@@ -446,6 +447,7 @@ export default function Home() {
         onDrop={handleDrop}
         style={{ fontFamily: "'Inter', 'Helvetica', 'Arial', sans-serif" }}
       >
+        <SlidingMenu />
         <div className="max-w-8xl w-full px-8 md:px-12 mt-10 mx-auto">
           <Header />
 
@@ -467,17 +469,6 @@ export default function Home() {
               handleFocus={handleFocus}
               openModal={openModal}
             />
-            {/* <div className="mt-4">
-              <ClassFilter
-                selectedClass={selectedClass}
-                onClassChange={handleClassChange}
-                availableClasses={Array.from(
-                  new Set(
-                    results.map((result) => result.metadata.class).filter((cls): cls is string => cls !== undefined)
-                  )
-                )}
-              />
-            </div> */}
 
             {errorMessage && (
               <div className="w-full mt-4 text-red-500 text-center">
@@ -517,21 +508,21 @@ export default function Home() {
                   {searchType === 'text' && (
                     <>
                       {' '}
-                      for <strong className="text-indigo-800">{query}</strong>
+                      for <strong style={{color:"#466CD9"}}>{query}</strong>
                     </>
                   )}
                   {searchType === 'image' && (
                     <>
                       {' '}
                       for{' '}
-                      <strong className="text-indigo-800">your image</strong>
+                      <strong style={{color:"#466CD9"}}>your image</strong>
                     </>
                   )}
                   {searchType === 'video' && (
                     <>
                       {' '}
                       for{' '}
-                      <strong className="text-indigo-800">your video</strong>
+                      <strong style={{color:"#466CD9"}}>your video</strong>
                     </>
                   )}
                 </p>
@@ -547,7 +538,7 @@ export default function Home() {
                     height="16"
                     viewBox="0 0 24 24"
                     fill="none"
-                    stroke="currentColor"
+                    stroke="#466CD9"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"

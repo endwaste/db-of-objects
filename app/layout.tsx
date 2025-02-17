@@ -26,6 +26,7 @@ export default function Layout({ children }: LayoutProps) {
     <html lang="en">
       <head>
         <title>Universal database of objects</title>
+        <link rel="icon" href="https://endwaste.io/assets/apple-touch-icon.png" type="image/png" />
         <meta name='description' content='Universal database of objects is an app built with Pinecone, Google Multimodal Embedding Model, and Next.js.' />
       </head>
       <body className={`${fira_mono.variable} ${roboto.variable}`}>

@@ -97,7 +97,7 @@ const SearchForm: React.FC<SearchFormProps> = ({
           } focus:outline-none`}
         disabled={isInputEmpty || isUploading || isSearching}
       >
-        <MagnifyingGlassIcon className="h-6 w-6 text-indigo-500 hover:text-indigo-700" />
+        <MagnifyingGlassIcon className="h-6 w-6  hover:text-indigo-700" style={{color:"#466CD9"}}/>
       </button>
 
       {/* Plus Icon for UploadModal */}
@@ -111,7 +111,7 @@ const SearchForm: React.FC<SearchFormProps> = ({
           fill="none"
           viewBox="0 0 24 24"
           strokeWidth="2"
-          stroke="currentColor"
+          stroke="#466CD9"
           className="h-6 w-6 text-indigo-500 hover:text-indigo-700"
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

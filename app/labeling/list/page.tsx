@@ -3,8 +3,22 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import SimilarityModal from "./similarityModal"; 
+import SlidingMenu from "../../components/SlidingMenu";
 
-// If using Next.js, consider environment logic:
+// Helper to parse robot name from original_s3_uri
+function getRobotFromS3Uri(s3Uri: string): string {
+  const path = s3Uri.replace("s3://", "");
+  const parts = path.split("/");
+  for (let p of parts) {
+    const lower = p.toLowerCase();
+    if (lower.startsWith("gem-") || lower.startsWith("scn-") || lower.startsWith("cv-")) {
+      return p;
+    }
+  }
+  return "UNKNOWN";
+}
+
+// Adjust to your environment logic
 const BASE_API = (() => {
   switch (process.env.NEXT_PUBLIC_VERCEL_ENV) {
     case "development":
@@ -21,7 +35,7 @@ const BASE_API = (() => {
 
 interface CropItem {
   original_s3_uri: string;
-  bounding_box: string;
+  bounding_box: number[];
   labeled: boolean;
   labeler_name: string;
   difficult: boolean;
@@ -38,39 +52,61 @@ interface SimilarityResult {
   embedding_id: string | null; // if empty => not in DB
 }
 
-
 export default function CropListPage() {
-  const [crops, setCrops] = useState<CropItem[]>([]);
+  // 1) Data structures for robot grouping
+  const [robotMap, setRobotMap] = useState<Record<string, CropItem[]>>({});
+  const [robots, setRobots] = useState<string[]>([]);
+
+  // 2) Which robot is selected, plus that robot's items
+  const [selectedRobot, setSelectedRobot] = useState<string | null>(null);
+  const [selectedRobotCrops, setSelectedRobotCrops] = useState<CropItem[]>([]);
+
+  // 3) Error/loading
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fields for the modal
+  // 4) Fields for the modal
   const [labelerName, setLabelerName] = useState("");
   const [difficult, setDifficult] = useState(false);
-  const [csvHadIncoming, setCsvHadIncoming] = useState(false);
+  const [dynamoDBHadIncoming, setDynamoDBHadIncoming] = useState(false);
 
-  const [similarityData, setSimilarityData] = useState<SimilarityResult | null>(
-    null
-  );
+  const [similarityData, setSimilarityData] = useState<SimilarityResult | null>(null);
   const [showModal, setShowModal] = useState(false);
 
-  // Keep track of which row is selected
+  // 5) Track which row is selected
   const [selectedOriginalS3Uri, setSelectedOriginalS3Uri] = useState("");
-  const [selectedBoundingBoxStr, setSelectedBoundingBoxStr] = useState("");
+  const [selectedBoundingBox, setSelectedBoundingBox] = useState<number[]>([]);
 
-  // Keep copies so we can compare changes
+  // 6) Originals for metadata changes
   const [originalSimilar, setOriginalSimilar] = useState<any>(null);
   const [originalIncoming, setOriginalIncoming] = useState<any>(null);
 
   // --------------------------------------------------------------------------
-  // Fetch labeling list
+  // Fetch labeling list once on mount
   // --------------------------------------------------------------------------
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
         const res = await axios.get(`${BASE_API}/api/list`);
-        setCrops(res.data.crops);
+        const fetchedCrops: CropItem[] = res.data.crops;
+        console.log("Fetched Crops:", fetchedCrops);
+
+        // Group by robot
+        const tempRobotMap: Record<string, CropItem[]> = {};
+        for (const crop of fetchedCrops) {
+          const robot = getRobotFromS3Uri(crop.original_s3_uri);
+          if (!tempRobotMap[robot]) {
+            tempRobotMap[robot] = [];
+          }
+          tempRobotMap[robot].push(crop);
+        }
+
+        // Sort the robot names
+        const sortedRobots = Object.keys(tempRobotMap).sort();
+
+        setRobotMap(tempRobotMap);
+        setRobots(sortedRobots);
       } catch (err) {
         console.error("Error fetching crops:", err);
         setError("Failed to fetch crop list.");
@@ -81,43 +117,58 @@ export default function CropListPage() {
   }, []);
 
   // --------------------------------------------------------------------------
+  // Show that robot's table
+  // --------------------------------------------------------------------------
+  function handleSelectRobot(robot: string) {
+    setSelectedRobot(robot);
+    const list = robotMap[robot] || [];
+    setSelectedRobotCrops(list);
+  }
+
+  // --------------------------------------------------------------------------
+  // "Back" => show folder icons again
+  // --------------------------------------------------------------------------
+  function handleBackToFolders() {
+    setSelectedRobot(null);
+    setSelectedRobotCrops([]);
+  }
+
+  // --------------------------------------------------------------------------
   // Handle row click => get similarity => open modal
   // --------------------------------------------------------------------------
   async function handleCropClick(crop: CropItem) {
     setSelectedOriginalS3Uri(crop.original_s3_uri);
-    setSelectedBoundingBoxStr(crop.bounding_box);
+    setSelectedBoundingBox(crop.bounding_box);
     try {
       // populate labeler/difficult from row
       setLabelerName(crop.labeler_name || "");
       setDifficult(crop.difficult || false);
 
-      const boundingBox = crop.bounding_box.split(",").map(Number);
       const payload = {
         original_s3_uri: crop.original_s3_uri,
-        bounding_box: boundingBox,
+        bounding_box: crop.bounding_box,
       };
 
       const resp = await axios.post(`${BASE_API}/api/similarity`, payload);
       const result: SimilarityResult = resp.data;
+      console.log("Similarity result:", result);
 
       let incoming = { ...result.incoming_crop_metadata };
-      const csvHadData = incoming && Object.keys(incoming).length > 0;
+      const dynamoDBHadData = incoming && Object.keys(incoming).length > 0;
 
       // If empty => copy from the similar crops metadata (minus pick_point)
-      if (!csvHadData) {
+      if (!dynamoDBHadData) {
         incoming = { ...result.similar_crop_metadata };
         delete incoming.pick_point;
       } else {
-        setCsvHadIncoming(true);
+        setDynamoDBHadIncoming(true);
       }
 
-      // Save the “original” states
+      // Save “original” states for detection of changes
       setOriginalIncoming(JSON.parse(JSON.stringify(incoming)));
-      setOriginalSimilar(
-        JSON.parse(JSON.stringify(result.similar_crop_metadata))
-      );
+      setOriginalSimilar(JSON.parse(JSON.stringify(result.similar_crop_metadata)));
 
-      // Set final similarityData with updated “incoming_crop_metadata”
+      // Set final similarityData w updated incoming
       setSimilarityData({
         ...result,
         incoming_crop_metadata: incoming,
@@ -135,11 +186,11 @@ export default function CropListPage() {
   function handleCloseModal() {
     setShowModal(false);
     setSimilarityData(null);
-    setCsvHadIncoming(false);
+    setDynamoDBHadIncoming(false);
   }
 
   // --------------------------------------------------------------------------
-  // "Add to UDO" logic
+  // "Add to UDO" logic 
   // --------------------------------------------------------------------------
   async function handleAddToUDO() {
     if (!similarityData) {
@@ -153,9 +204,13 @@ export default function CropListPage() {
       alert("No presigned URL found for the incoming crop.");
       return;
     }
+    if (!inc.pick_point) {
+      alert("No pick_point found for the incoming crop.");
+      return;
+    }
 
     try {
-      // Build FormData for /api/new (some endpoint you have).
+      // Build FormData for /api/new
       const formData = new FormData();
       formData.append("presigned_url", presignedUrl);
       formData.append("brand", inc.brand || "");
@@ -182,16 +237,14 @@ export default function CropListPage() {
       const { metadata } = data;
       console.log("UDO metadata returned:", metadata);
 
-      // Update CSV with new embedding_id
+      // Update DynamoDB with new embedding_id
       const updatePayload = {
         original_s3_uri: selectedOriginalS3Uri,
-        bounding_box: selectedBoundingBoxStr.split(",").map((x) =>
-          Number(x.trim())
-        ),
+        bounding_box: selectedBoundingBox,
         embedding_id: metadata.embedding_id,
       };
 
-      await axios.put(`${BASE_API}/api/update_csv_embedding`, updatePayload, {
+      await axios.put(`${BASE_API}/api/update_dynamodb_embedding`, updatePayload, {
         headers: { "Content-Type": "application/json" },
       });
 
@@ -200,7 +253,7 @@ export default function CropListPage() {
         prev ? { ...prev, embedding_id: metadata.embedding_id } : prev
       );
 
-      alert("Crop successfully added to UDO and CSV updated!");
+      alert("Crop successfully added to UDO and Dynamo DB updated!");
     } catch (error) {
       console.error("Add to UDO error:", error);
       alert("Failed to add crop to UDO. See console for details.");
@@ -208,9 +261,47 @@ export default function CropListPage() {
   }
 
   // --------------------------------------------------------------------------
-  // "Next" / "Finish Labeling" => update CSV, possibly update UDO
+  // "Next" => finalize current => pick next unlabeled in same robot
   // --------------------------------------------------------------------------
-  async function updateRecords(action: "next" | "end") {
+  async function handleNext() {
+    if (!similarityData) return;
+
+    // 1) finalize the current item
+    await finalizeCurrentItem(); 
+
+    // 2) find the next unlabeled item in selectedRobotCrops
+    const idx = selectedRobotCrops.findIndex(
+      (c) =>
+        c.original_s3_uri === selectedOriginalS3Uri &&
+        c.bounding_box.join(",") === selectedBoundingBox.join(",")
+    );
+    for (let i = idx + 1; i < selectedRobotCrops.length; i++) {
+      if (!selectedRobotCrops[i].labeled) {
+        // found next unlabeled => open similarity
+        handleCropClick(selectedRobotCrops[i]);
+        return;
+      }
+    }
+
+    // If none
+    alert("No more unlabeled items for this robot!");
+    handleCloseModal();
+  }
+
+  // --------------------------------------------------------------------------
+  // "Finish Labeling" => finalize current => close modal
+  // --------------------------------------------------------------------------
+  async function handleFinish() {
+    if (!similarityData) return;
+    await finalizeCurrentItem(); 
+    alert("Crop updated. Labeling session ended.");
+    handleCloseModal();
+  }
+
+  // --------------------------------------------------------------------------
+  // finalizeCurrentItem => updates DB (server) once, removing any action param
+  // --------------------------------------------------------------------------
+  async function finalizeCurrentItem() {
     if (!similarityData) return;
     const currentSimilar = similarityData.similar_crop_metadata;
     const currentIncoming = similarityData.incoming_crop_metadata;
@@ -219,7 +310,7 @@ export default function CropListPage() {
     let updateSimilarPromise = Promise.resolve();
     let updateIncomingPromise = Promise.resolve();
 
-    // 1. If similar crop metadata has changed, update its UDO record.
+    // If similar metadata changed => update
     if (JSON.stringify(currentSimilar) !== JSON.stringify(originalSimilar)) {
       const simEmbeddingId = currentSimilar.embedding_id;
       if (simEmbeddingId) {
@@ -240,7 +331,7 @@ export default function CropListPage() {
       }
     }
 
-    // 2. If incoming crop metadata has changed AND the crop is in the UDO, update it.
+    // If incoming metadata changed => update
     if (
       JSON.stringify(currentIncoming) !== JSON.stringify(originalIncoming) &&
       similarityData.embedding_id
@@ -261,116 +352,249 @@ export default function CropListPage() {
       );
     }
 
-    // Wait for both requests to finish
     await Promise.all([updateSimilarPromise, updateIncomingPromise]);
 
-    // 3. Update CSV with final data
+    // Now update the DB row
     const updatePayload = {
       original_s3_uri: selectedOriginalS3Uri,
-      bounding_box: selectedBoundingBoxStr.split(",").map((x: string) =>
-        Number(x.trim())
-      ),
+      bounding_box: selectedBoundingBox,
       labeler_name: labelerName || "",
       difficult: difficult,
       incoming_crop_metadata: currentIncoming,
       similar_crop_metadata: currentSimilar,
-      embedding_id: similarityData.embedding_id || "",
-      action: action,
+      embedding_id: similarityData.embedding_id || ""
+      // no 'action' here
     };
 
     try {
-      const csvResp = await axios.put(
-        `${BASE_API}/api/update_csv`,
+      const dynamoResp = await axios.put(
+        `${BASE_API}/api/update_dynamodb`,
         updatePayload,
         { headers: { "Content-Type": "application/json" } }
       );
-      const csvResult = csvResp.data;
-      if (action === "next") {
-        if (csvResult.next_crop) {
-          alert(csvResult.message);
-          // automatically open the next one
-          handleCropClick(csvResult.next_crop);
-        } else {
-          alert(csvResult.message);
-          handleCloseModal();
-        }
-      } else {
-        alert(csvResult.message);
-        handleCloseModal();
-      }
+      // We do not show success messages for "next" in the normal flow
+      // We'll show them only in handleFinish or if there's no next item
+      console.log("finalizeCurrentItem response:", dynamoResp.data);
     } catch (error) {
-      console.error("Error updating CSV:", error);
-      alert("Failed to update CSV. Check console for details.");
+      console.error("Error updating DynamoDB:", error);
+      alert("Failed to update DynamoDB. Check console for details.");
     }
-  }
-
-  // Handler for the Next button
-  async function handleNext() {
-    await updateRecords("next");
-  }
-
-  // Handler for the Finish Labeling button
-  async function handleFinish() {
-    await updateRecords("end");
   }
 
   // --------------------------------------------------------------------------
   // Render
   // --------------------------------------------------------------------------
+  const showFolderIcons = !selectedRobot;
+
+  // If a robot is selected, we can compute how many are labeled vs. total
+  let labeledCount = 0;
+  let totalCount = 0;
+  if (selectedRobotCrops.length > 0) {
+    totalCount = selectedRobotCrops.length;
+    labeledCount = selectedRobotCrops.filter((c) => c.labeled).length;
+  }
+  const labeledPercent = totalCount === 0 ? 0 : (labeledCount / totalCount) * 100;
+
   return (
-    <div style={{ padding: "1rem", fontFamily: "sans-serif" }}>
-      <h1 style={{ marginBottom: "1rem", fontSize: "1.5rem" }}>Crop List</h1>
+    <div style={{ background: "#f3f4f6" }}>
+      {/* Sliding Menu */}
+      <SlidingMenu />
 
-      {loading && <p>Loading crops...</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      {!loading && !error && crops.length === 0 && <p>No crops found.</p>}
+      {/* Main Content */}
+      <div style={{ padding: "2.5rem", fontFamily: "'Inter', sans-serif", minHeight: "100vh", textAlign: "center" }}>
+        {/* Logo Image Centered */}
+        <img 
+          src="https://endwaste.io/assets/logo_footer.png" 
+          alt="Glacier Logo"
+          style={{ width: "80px", height: "auto", marginBottom: "0.5rem", display: "block", marginLeft: "auto", marginRight: "auto" }} 
+        />
+        <div className="text-center">
+          <h1 className="font-sans text-4xl mb-3" style={{color:"#466CD9"}}>Universal database of objects</h1>
+        </div>
 
-      {crops.length > 0 && !loading && !error && (
-        <table
-          style={{
-            borderCollapse: "collapse",
-            width: "100%",
-            marginBottom: "1rem",
-            fontSize: "14px",
-          }}
-        >
-          <thead>
-            <tr style={{ background: "#f2f2f2", textAlign: "left" }}>
-              <th style={{ padding: "8px" }}>Original S3 URI</th>
-              <th style={{ padding: "8px" }}>Bounding Box</th>
-              <th style={{ padding: "8px" }}>Labeled?</th>
-              <th style={{ padding: "8px" }}>Labeler&apos;s Name</th>
-            </tr>
-          </thead>
-          <tbody>
-            {crops.map((crop, idx) => (
-              <tr
-                key={idx}
-                onClick={() => handleCropClick(crop)}
+        {loading && <p>Loading crops...</p>}
+        {error && <p style={{ color: "red" }}>{error}</p>}
+
+        {showFolderIcons && !loading && !error && (
+          <div style={{ marginBottom: "2rem" }}>
+            <h1 className="font-sans text-base mb-5 text-gray-900">
+              Select a robot or scanner folder to begin labeling:
+            </h1>
+
+            {robots.length === 0 && <p>No data found.</p>}
+
+            {/* Centered folder icons with shadows */}
+            <div style={{ 
+              display: "flex", 
+              flexWrap: "wrap", 
+              gap: "2rem", 
+              justifyContent: "center", 
+              alignItems: "center", 
+              maxWidth: "90%", 
+              margin: "0 auto"
+            }}>
+              {robots.map((robot) => {
+                const itemCount = robotMap[robot].length;
+                return (
+                  <div
+                    key={robot}
+                    style={{
+                      textAlign: "center",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => handleSelectRobot(robot)}
+                  >
+                    <img
+                      src="https://images.vexels.com/media/users/3/276661/isolated/preview/614fa2f6000e812cb013b82d5ed0eb21-blue-folder-squared.png"
+                      alt="folder icon"
+                      style={{
+                        width: "100px",
+                        height: "100px",
+                        marginBottom: "8px",
+                        filter: "drop-shadow(2px 2px 2px rgba(0,0,0,0.2))",
+                        transition: "filter 0.2s ease-in-out",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.filter = "drop-shadow(2px 2px 2px rgba(0,0,255,0.4))")}
+                      onMouseLeave={(e) => (e.currentTarget.style.filter = "drop-shadow(2px 2px 2px rgba(0,0,0,0.2))")}
+                    />
+                    <div style={{ fontWeight: "600", fontSize: "16px", color: "#374151", textTransform: "uppercase" }}>{robot}</div>
+                    <div style={{ fontSize: "12px", color: "#6B7280" }}>{itemCount} items</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* If a robot is selected => show the robot's table + back button + progress bar */}
+        {selectedRobot && (
+          <div>
+            {/* Container for back button and title */}
+            <div style={{ 
+              position: "relative", 
+              width: "100%",
+              margin: "0 auto",
+              paddingBottom: "1rem"
+            }}>
+              {/* Back Button with Arrow - Aligned Left */}
+              <button
+                onClick={() => {
+                  handleCloseModal();
+                  handleBackToFolders();
+                }}
                 style={{
+                  position: "absolute",
+                  left: "0",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  color: "#374151",
+                  background: "none",
+                  border: "none",
                   cursor: "pointer",
-                  borderBottom: "1px solid #eee",
                 }}
               >
-                <td style={{ padding: "8px" }}>{crop.original_s3_uri}</td>
-                <td style={{ padding: "8px" }}>{crop.bounding_box}</td>
-                <td style={{ padding: "8px" }}>
-                  {crop.labeled ? "Yes" : "No"}
-                </td>
-                <td style={{ padding: "8px" }}>
-                  {crop.labeler_name || ""}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+                <span style={{ fontSize: "16px" }}>←</span> Back
+              </button>
+
+              {/* Robot Title - Centered */}
+              <h2 style={{ 
+                fontSize: "16px", 
+                fontWeight: "600", 
+                color: "#1F2937", 
+                textTransform: "uppercase", 
+                margin: "0 auto", 
+                textAlign: "center",
+                display: "block",
+                width: "fit-content"
+              }}>
+                {selectedRobot}
+              </h2>
+            </div>
+
+            {/* Table - Left-aligned */}
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  borderCollapse: "collapse",
+                  width: "100%",
+                  fontSize: "14px",
+                  background: "#ffffff",
+                  borderRadius: "8px",
+                  boxShadow: "0px 2px 5px rgba(0, 0, 0, 0.1)",
+                  textAlign: "left",
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#E5E7EB", fontSize: "15px", fontWeight: "600", color: "#374151" }}>
+                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Original S3 URI</th>
+                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Bounding Box</th>
+                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Labeled?</th>
+                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Labeler</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedRobotCrops.map((crop, idx) => (
+                    <tr
+                      key={idx}
+                      onClick={() => handleCropClick(crop)}
+                      style={{
+                        cursor: "pointer",
+                        borderBottom: "1px solid #E5E7EB",
+                        transition: "background 0.2s ease-in-out",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#F9FAFB")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <td style={{ padding: "12px", wordBreak: "break-word", color: "#1F2937", fontWeight: "500" }}>
+                        {crop.original_s3_uri}
+                      </td>
+                      <td style={{ padding: "12px", color: "#4B5563" }}>
+                        {crop.bounding_box.join(", ")}
+                      </td>
+                      <td style={{ padding: "12px", fontWeight: "600", color: crop.labeled ? "#10B981" : "#EF4444" }}>
+                        {crop.labeled ? "Yes" : "No"}
+                      </td>
+                      <td style={{ padding: "12px", color: "#4B5563" }}>
+                        {crop.labeler_name || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Wider Progress Bar */}
+            <div style={{ 
+              margin: "12px 0", 
+              width: "100%", 
+              background: "#E5E7EB", 
+              height: "14px", 
+              borderRadius: "6px",
+              overflow: "hidden"
+            }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: `${(totalCount === 0 ? 0 : (labeledCount / totalCount) * 100).toFixed(1)}%`,
+                  background: labeledCount === totalCount ? "#10B981" : "#3B82F6",
+                  borderRadius: "6px",
+                  transition: "width 0.3s",
+                }}
+              />
+            </div>
+            <p style={{ fontSize: "14px", color: "#4B5563", fontWeight: "500" }}>
+              {labeledCount} / {totalCount} labeled (
+              {(totalCount === 0 ? 0 : (labeledCount / totalCount) * 100).toFixed(1)}%)
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Render your separate SimilarityModal */}
       <SimilarityModal
         showModal={showModal}
         similarityData={similarityData}
-        csvHadIncoming={csvHadIncoming}
+        dynamoDBHadIncoming={dynamoDBHadIncoming}
         labelerName={labelerName}
         setLabelerName={setLabelerName}
         difficult={difficult}
