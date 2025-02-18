@@ -47,15 +47,20 @@ export default function SlidingMenu() {
 
         {/* Navigation */}
         <nav className="mt-16 ml-5 p-4">
-          <ul className="space-y-4 font-sans text-base text-gray-900">
-            <li className="mb-5">
+          <ul className="space-y-6 font-sans text-base text-gray-900">
+            <li>
               <a href="/" className="hover:underline">
                 Home
               </a>
             </li>
-            <li className="mb-5">
+            <li>
               <a href="/labeling/list" className="hover:underline">
                 Labeling
+              </a>
+            </li>
+            <li>
+              <a href="/labeling/try" className="hover:underline">
+                Try it out!
               </a>
             </li>
           </ul>
