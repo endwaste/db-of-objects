@@ -542,7 +542,7 @@ else:
 """
 Example Response:
 {
-    "status": "success",
+    "status": "ok",
     "image_size": {
         "width": 1024,
         "height": 768
