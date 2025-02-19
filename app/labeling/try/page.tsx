@@ -506,7 +506,7 @@ Brand: ${d.pinecone_metadata?.brand || "?"}`;
               </p>
               <pre
                 style={{
-                    backgroundColor: "#f3f4f6",
+                    backgroundColor: "#f5f2f0",
                     padding: "10px",
                     borderRadius: "8px",
                     fontSize: "14px",
