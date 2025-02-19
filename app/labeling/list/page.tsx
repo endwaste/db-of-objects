@@ -528,7 +528,7 @@ export default function CropListPage() {
                   <tr style={{ background: "#E5E7EB", fontSize: "15px", fontWeight: "600", color: "#374151" }}>
                     <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Original S3 URI</th>
                     <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Bounding Box</th>
-                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Labeled?</th>
+                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Reviewed?</th>
                     <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Labeler</th>
                   </tr>
                 </thead>
