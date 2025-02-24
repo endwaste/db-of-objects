@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { MagnifyingGlassIcon, PhotoFrameIcon } from './Icons';
 
 // Define props
 type SearchFormProps = {
   query: string;
   handleInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleSubmit: (event: React.FormEvent<HTMLFormElement>) => void; // Explicit type
+  handleSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   isInputEmpty: boolean;
   isUploading: boolean;
@@ -14,11 +14,10 @@ type SearchFormProps = {
   suggestions: string[];
   handleSuggestionClick: (suggestion: string) => void;
   showSuggestions: boolean;
+  setShowSuggestions: (value: boolean) => void;
   handleFocus: () => void;
   openModal: () => void;
 };
-
-
 
 const SearchForm: React.FC<SearchFormProps> = ({
   query,
@@ -32,19 +31,41 @@ const SearchForm: React.FC<SearchFormProps> = ({
   suggestions,
   handleSuggestionClick,
   showSuggestions,
+  setShowSuggestions,
   handleFocus,
-  openModal, // Function to open UploadModal
+  openModal,
 }) => {
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+
+    if (showSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSuggestions, setShowSuggestions]);
+
   return (
-    <form onSubmit={handleSubmit} className="flex items-center ">
-      <div className="flex-grow flex items-center bg-white rounded shadow-md w-3/5 max-w-2xl">
+    <form onSubmit={handleSubmit} className="flex items-center">
+      <div className="flex-grow flex items-center bg-white rounded shadow-md w-3/5 max-w-2xl relative">
         {/* Input Field */}
         <div className="flex-grow relative">
           <input
             type="text"
             value={query}
             onChange={handleInputChange}
-            onFocus={handleFocus}
+            onFocus={() => {
+              handleFocus();
+              setShowSuggestions(true);
+            }}
             placeholder="Describe the object, or drag in an image"
             className="w-full flex-grow px-6 py-3 text-gray-700 bg-transparent focus:outline-none"
             disabled={isUploading || isSearching}
@@ -52,12 +73,18 @@ const SearchForm: React.FC<SearchFormProps> = ({
 
           {/* Suggestions Dropdown */}
           {showSuggestions && suggestions.length > 0 && (
-            <div className="absolute left-0 right-0 mt-2 w-full bg-white border rounded shadow-lg max-h-60 overflow-y-auto z-10">
+            <div
+              ref={suggestionsRef}
+              className="absolute left-0 right-0 mt-2 w-full bg-white border rounded shadow-lg max-h-60 overflow-y-auto z-10"
+            >
               {suggestions.map((suggestion, index) => (
                 <div
                   key={index}
                   className="px-6 py-1.5 hover:bg-gray-100 cursor-pointer text-gray-700 flex items-center"
-                  onClick={() => handleSuggestionClick(suggestion)}
+                  onClick={() => {
+                    handleSuggestionClick(suggestion);
+                    setShowSuggestions(false);
+                  }}
                 >
                   <MagnifyingGlassIcon className="h-4 w-4 mr-3 text-indigo-500" />
                   {suggestion}
@@ -89,15 +116,16 @@ const SearchForm: React.FC<SearchFormProps> = ({
       {/* Magnifying Glass Icon */}
       <button
         type="submit"
-        className={`ml-1 px-3 ${isInputEmpty
-          ? 'text-gray-400 cursor-not-allowed'
-          : isUploading || isSearching
+        className={`ml-1 px-3 ${
+          isInputEmpty
+            ? 'text-gray-400 cursor-not-allowed'
+            : isUploading || isSearching
             ? 'text-gray-400 cursor-wait'
             : 'text-gray-500 hover:text-gray-700'
-          } focus:outline-none`}
+        } focus:outline-none`}
         disabled={isInputEmpty || isUploading || isSearching}
       >
-        <MagnifyingGlassIcon className="h-6 w-6  hover:text-indigo-700" style={{color:"#466CD9"}}/>
+        <MagnifyingGlassIcon className="h-6 w-6 hover:text-indigo-700" style={{ color: '#466CD9' }} />
       </button>
 
       {/* Plus Icon for UploadModal */}
