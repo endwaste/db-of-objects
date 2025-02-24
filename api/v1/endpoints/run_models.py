@@ -38,6 +38,7 @@ def generate_embeddings_from_image(image: Image.Image) -> List[float]:
     """
     Use the CLIP model to generate an embedding from a Pillow Image object.
     """
+    img_tensor = preprocess(image).unsqueeze(0)
     if not torch.cuda.is_available():
         model.to("cpu")
         img_tensor = img_tensor.to("cpu")
