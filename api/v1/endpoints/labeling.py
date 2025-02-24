@@ -7,7 +7,7 @@ import uuid
 from typing import List, Dict, Any, Optional
 from decimal import Decimal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 import json
 from pydantic import BaseModel
 from PIL import Image
@@ -130,33 +130,56 @@ def get_labeling_list():
     }
 
 
-@router.post("/similarity")
-def similarity_search(payload: SimilarityRequest):
+@router.api_route("/similarity", methods=["GET", "POST"])
+async def similarity_search(
+    request: Request,
+    original_s3_uri: Optional[str] = Query(None, description="S3 URI of the original image"),
+    bounding_box: Optional[str] = Query(None, description="Bounding box in format xmin,ymin,xmax,ymax"),
+    payload: Optional[SimilarityRequest] = None  # For POST requests
+):
     """
-    1) 'bounding_box' is [xmin, ymin, xmax, ymax] from the client.
-    2) Attempt to find an item in DynamoDB using the new sort key format.
-    3) If not found, create a new item (with shard="UNLABELED") using the new key.
-    4) If no crop_s3_uri exists, crop the image and upload the crop.
-    5) Generate embeddings, query Pinecone for the top match, and update similar_crop_* fields.
-    6) Return presigned URLs and related metadata.
+    Supports both:
+      - **GET** request: `/similarity?original_s3_uri=<s3_uri>&bounding_box=100,150,400,600`
+      - **POST** request: JSON body `{ "original_s3_uri": "<s3_uri>", "bounding_box": [100, 150, 400, 600] }`
     """
+    
     now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    # Build the sort key
-    s3_uri_bb = build_s3_uri_bounding_box_int(payload.original_s3_uri, payload.bounding_box)
 
-    # 1) Try to find an existing item using the new sort key.
-    item = find_item_by_s3_and_box(payload.original_s3_uri, payload.bounding_box)
+    # Determine if request is GET or POST
+    if request.method == "GET":
+        if not original_s3_uri or not bounding_box:
+            raise HTTPException(status_code=400, detail="Missing required parameters: original_s3_uri and bounding_box")
+        
+        # Convert bounding_box from "100,150,400,600" -> [100, 150, 400, 600]
+        try:
+            bounding_box = [int(x) for x in bounding_box.split(",")]
+            if len(bounding_box) != 4:
+                raise ValueError("Bounding box must have exactly 4 values.")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid bounding_box format. Expected format: xmin,ymin,xmax,ymax")
+    
+    elif request.method == "POST":
+        if not payload:
+            raise HTTPException(status_code=400, detail="Invalid request body.")
+        original_s3_uri = payload.original_s3_uri
+        bounding_box = payload.bounding_box
+
+    # Build the unique identifier
+    s3_uri_bb = build_s3_uri_bounding_box_int(original_s3_uri, bounding_box)
+
+    # Try to find an existing item
+    item = find_item_by_s3_and_box(original_s3_uri, bounding_box)
 
     if not item:
-        # Create new item => shard="UNLABELED"
-        device = parse_device_from_s3(payload.original_s3_uri)
+        # Create a new item in the "UNLABELED" shard
+        device = parse_device_from_s3(original_s3_uri)
 
         item = {
             "shard": "UNLABELED",
             "s3_uri_bounding_box": s3_uri_bb,
             "device": device,
-            "s3_uri": payload.original_s3_uri,
-            "box": json.dumps(payload.bounding_box),
+            "s3_uri": original_s3_uri,
+            "box": json.dumps(bounding_box),
             "embedding_id": "",
             "crop_s3_uri": "",
             "similar_crop_s3_uri": "",
@@ -171,7 +194,7 @@ def similarity_search(payload: SimilarityRequest):
         }
         table.put_item(Item=item)
     else:
-        # Mark the item as "in_progress"
+        # Mark as "in_progress"
         table.update_item(
             Key={
                 "shard": item["shard"],
@@ -183,12 +206,11 @@ def similarity_search(payload: SimilarityRequest):
                 ":uts": now_str
             }
         )
-        # Reload the updated item
-        item = find_item_by_s3_and_box(payload.original_s3_uri, payload.bounding_box)
+        item = find_item_by_s3_and_box(original_s3_uri, bounding_box)
 
-    # 2) Ensure we have a crop_s3_uri
+    # Ensure we have a crop_s3_uri
     if not item.get("crop_s3_uri"):
-        new_crop_uri = create_and_upload_crop(payload.original_s3_uri, payload.bounding_box)
+        new_crop_uri = create_and_upload_crop(original_s3_uri, bounding_box)
         table.update_item(
             Key={
                 "shard": item["shard"],
@@ -202,19 +224,7 @@ def similarity_search(payload: SimilarityRequest):
         )
         item["crop_s3_uri"] = new_crop_uri
 
-    # 3) incoming_crop_metadata
-    embedding_id = item.get("embedding_id") or ""
-    incoming_crop_metadata = {}
-    if embedding_id:
-        fetched = settings.get_pinecone_index().fetch(ids=[embedding_id])
-        vectors = fetched.get("vectors", {})
-        if embedding_id in vectors:
-            incoming_crop_metadata = vectors[embedding_id].get("metadata", {})
-    else:
-        raw_str = item.get("new_crop_metadata", "")
-        incoming_crop_metadata = safely_parse_str_dict(raw_str)
-
-    # 4) Generate embeddings => Pinecone => set similar_...
+    # Generate embeddings and query Pinecone
     embeddings = generate_embeddings(item["crop_s3_uri"])
     top_match = query_pinecone_for_top_match(embeddings, exclude_s3_file_path=item["crop_s3_uri"])
     similar_crop_s3_uri = ""
@@ -243,20 +253,19 @@ def similarity_search(payload: SimilarityRequest):
             }
         )
 
+    # Generate presigned URLs
     presigned_incoming = settings.generate_presigned_url(item["crop_s3_uri"])
-    presigned_similar = None
-    if similar_crop_s3_uri:
-        presigned_similar = settings.generate_presigned_url(similar_crop_s3_uri)
+    presigned_similar = settings.generate_presigned_url(similar_crop_s3_uri) if similar_crop_s3_uri else None
 
     return {
         "crop_s3_uri": item["crop_s3_uri"],
         "crop_presigned_url": presigned_incoming,
-        "incoming_crop_metadata": incoming_crop_metadata,
+        "incoming_crop_metadata": safely_parse_str_dict(item.get("new_crop_metadata", "")),
         "similar_crop_s3_uri": similar_crop_s3_uri,
         "similar_crop_presigned_url": presigned_similar,
         "similar_crop_metadata": similar_metadata,
         "score": score,
-        "embedding_id": embedding_id,
+        "embedding_id": item.get("embedding_id", ""),
     }
 
 
