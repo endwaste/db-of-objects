@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 # DynamoDB Setup
-DDB_TABLE_NAME = "LabelingQueue"
+DDB_TABLE_NAME = "UDOLabelingQueue"
 dynamodb = boto3.resource("dynamodb", region_name=settings.default_region)
 table = dynamodb.Table(DDB_TABLE_NAME)
 
@@ -98,7 +98,7 @@ def get_labeling_list():
                         table.update_item(
                             Key={
                                 "shard": item["shard"],
-                                "timestamp": item["timestamp"]
+                                "s3_uri_bounding_box": item["s3_uri_bounding_box"],
                             },
                             UpdateExpression="SET in_progress = :ip, updated_timestamp = :uts",
                             ExpressionAttributeValues={
@@ -113,8 +113,6 @@ def get_labeling_list():
     crop_list = []
     for i in all_items:
         raw_box = i.get("box", "")
-
-        # Ensure bounding_box is always in the correct format
         bounding_box = convert_box_to_float_list(raw_box)
 
         crop_list.append({
@@ -135,17 +133,18 @@ def get_labeling_list():
 @router.post("/similarity")
 def similarity_search(payload: SimilarityRequest):
     """
-    1) bounding_box is [float,float,float,float] from the client.
-    2) We'll do a GSI lookup in 2 ways:
-       - First with the normal array JSON string
-       - If not found, try the old "DB format" string
-    3) If still not found, create a new item with bounding_box stored in normal array format.
-    4) If no crop_s3_uri, crop & upload.
-    5) Generate embeddings, do Pinecone, set similar_crop_*.
-    6) Return presigned URLs, etc.
+    1) 'bounding_box' is [xmin, ymin, xmax, ymax] from the client.
+    2) Attempt to find an item in DynamoDB using the new sort key format.
+    3) If not found, create a new item (with shard="UNLABELED") using the new key.
+    4) If no crop_s3_uri exists, crop the image and upload the crop.
+    5) Generate embeddings, query Pinecone for the top match, and update similar_crop_* fields.
+    6) Return presigned URLs and related metadata.
     """
     now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    # 1) Try to find item
+    # Build the sort key
+    s3_uri_bb = build_s3_uri_bounding_box_int(payload.original_s3_uri, payload.bounding_box)
+
+    # 1) Try to find an existing item using the new sort key.
     item = find_item_by_s3_and_box(payload.original_s3_uri, payload.bounding_box)
 
     if not item:
@@ -154,12 +153,10 @@ def similarity_search(payload: SimilarityRequest):
 
         item = {
             "shard": "UNLABELED",
-            "timestamp": now_str,
+            "s3_uri_bounding_box": s3_uri_bb,
             "device": device,
             "s3_uri": payload.original_s3_uri,
-            # We'll store the bounding box in normal array format JSON
             "box": json.dumps(payload.bounding_box),
-
             "embedding_id": "",
             "crop_s3_uri": "",
             "similar_crop_s3_uri": "",
@@ -170,16 +167,15 @@ def similarity_search(payload: SimilarityRequest):
             "in_progress": "true",
             "similar": "false",
             "difficult": "false",
-
             "updated_timestamp": now_str
         }
         table.put_item(Item=item)
     else:
-        # Mark in_progress
+        # Mark the item as "in_progress"
         table.update_item(
             Key={
                 "shard": item["shard"],
-                "timestamp": item["timestamp"]
+                "s3_uri_bounding_box": item["s3_uri_bounding_box"]
             },
             UpdateExpression="SET in_progress = :ip, updated_timestamp = :uts",
             ExpressionAttributeValues={
@@ -187,18 +183,16 @@ def similarity_search(payload: SimilarityRequest):
                 ":uts": now_str
             }
         )
-        # Reload
+        # Reload the updated item
         item = find_item_by_s3_and_box(payload.original_s3_uri, payload.bounding_box)
 
     # 2) Ensure we have a crop_s3_uri
-    if not item["crop_s3_uri"]:
-        # For cropping, we need the bounding box in numeric form
-        # 'payload.bounding_box' is already a list of floats
+    if not item.get("crop_s3_uri"):
         new_crop_uri = create_and_upload_crop(payload.original_s3_uri, payload.bounding_box)
         table.update_item(
             Key={
                 "shard": item["shard"],
-                "timestamp": item["timestamp"]
+                "s3_uri_bounding_box": item["s3_uri_bounding_box"]
             },
             UpdateExpression="SET crop_s3_uri = :c, updated_timestamp = :uts",
             ExpressionAttributeValues={
@@ -235,7 +229,7 @@ def similarity_search(payload: SimilarityRequest):
         table.update_item(
             Key={
                 "shard": item["shard"],
-                "timestamp": item["timestamp"]
+                "s3_uri_bounding_box": item["s3_uri_bounding_box"]
             },
             UpdateExpression="""
                 SET similar_crop_s3_uri = :sim_s3,
@@ -249,7 +243,6 @@ def similarity_search(payload: SimilarityRequest):
             }
         )
 
-    # 5) Return
     presigned_incoming = settings.generate_presigned_url(item["crop_s3_uri"])
     presigned_similar = None
     if similar_crop_s3_uri:
@@ -271,9 +264,9 @@ def similarity_search(payload: SimilarityRequest):
 def update_dynamodb_final(payload: UpdateDynamoDBRequest):
     """
     1) bounding_box is [float,float,float,float].
-    2) find item using the bounding_box in both normal & old DB format.
-    3) Mark labeled, store metadata, possibly embedding_id, compute 'similar'.
-    4) Move item from shard=UNLABELED => shard=LABELED (delete + put).
+    2) Find the item using the new sort key (constructed as s3_uri#xmin#ymin#xmax#ymax).
+    3) Mark the item as labeled, store metadata (and possibly embedding_id), and compute 'similar'.
+    4) Move the item from shard "UNLABELED" to shard "LABELED" by deleting the old item and putting a new one.
     """
     item = find_item_by_s3_and_box(payload.original_s3_uri, payload.bounding_box)
     if not item:
@@ -281,10 +274,10 @@ def update_dynamodb_final(payload: UpdateDynamoDBRequest):
 
     now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
     old_shard = item["shard"]
-    old_created = item["timestamp"]
+    old_s3_uri_bb = item["s3_uri_bounding_box"]
 
-    # Delete old
-    table.delete_item(Key={"shard": old_shard, "timestamp": old_created})
+    # Delete the old item using the new primary key
+    table.delete_item(Key={"shard": old_shard, "s3_uri_bounding_box": old_s3_uri_bb})
 
     updated_item = dict(item)
     updated_item["shard"] = "LABELED"
@@ -294,20 +287,24 @@ def update_dynamodb_final(payload: UpdateDynamoDBRequest):
     updated_item["in_progress"] = "false"
     updated_item["updated_timestamp"] = now_str
 
-    # final metadata
+    # Store final metadata
     updated_item["similar_crop_metadata"] = json.dumps(payload.similar_crop_metadata)
     updated_item["new_crop_metadata"] = json.dumps(payload.incoming_crop_metadata)
+
+    # If the crop has a "metadata" field, store it
+    if "metadata" in item:
+        updated_item["metadata"] = item["metadata"]
 
     if payload.embedding_id:
         updated_item["embedding_id"] = payload.embedding_id
 
-    # compute 'similar'
+    # Compute 'similar'
     fields = ["brand", "color", "material", "shape"]
     incoming_filtered = {k: payload.incoming_crop_metadata.get(k) for k in fields}
     similar_filtered = {k: payload.similar_crop_metadata.get(k) for k in fields}
     updated_item["similar"] = "true" if incoming_filtered == similar_filtered else "false"
 
-    # Put new item with same timestamp
+    # Put the new item (with the same sort key)
     table.put_item(Item=updated_item)
 
     return {"message": "Crop updated. Labeling session ended.", "status": "ok"}
@@ -316,7 +313,7 @@ def update_dynamodb_final(payload: UpdateDynamoDBRequest):
 @router.put("/update_dynamodb_embedding")
 def update_dynamodb_embedding(payload: UpdateDynamoDBEmbeddingRequest):
     """
-    Just update embedding_id in Dynamo for a bounding_box (list of floats).
+    Update only the embedding_id in DynamoDB for the given bounding_box.
     """
     item = find_item_by_s3_and_box(payload.original_s3_uri, payload.bounding_box)
     if not item:
@@ -324,7 +321,7 @@ def update_dynamodb_embedding(payload: UpdateDynamoDBEmbeddingRequest):
 
     now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
     table.update_item(
-        Key={"shard": item["shard"], "timestamp": item["timestamp"]},
+        Key={"shard": item["shard"], "s3_uri_bounding_box": item["s3_uri_bounding_box"]},
         UpdateExpression="SET embedding_id = :eid, updated_timestamp = :uts",
         ExpressionAttributeValues={
             ":eid": payload.embedding_id,
@@ -340,68 +337,50 @@ def update_dynamodb_embedding(payload: UpdateDynamoDBEmbeddingRequest):
 
 def query_by_shard(shard_val: str) -> List[Dict[str, Any]]:
     resp = table.query(
-        # Instead of "shard = :sh", do "#sd = :sh" and map "#sd" => "shard"
         KeyConditionExpression="#sd = :sh",
         ExpressionAttributeNames={"#sd": "shard"},
         ExpressionAttributeValues={":sh": shard_val},
-        ScanIndexForward=True  # or False if you want latest first
+        ScanIndexForward=True
     )
     return resp.get("Items", [])
+
+def build_s3_uri_bounding_box_int(s3_uri: str, bounding_box: List[float]) -> str:
+    """
+    Constructs the sort key in the format: s3_uri#xmin#ymin#xmax#ymax,
+    converting bounding box values to integers.
+    """
+    xmin, ymin, xmax, ymax = [int(round(x)) for x in bounding_box]
+    return f"{s3_uri}#{xmin}#{ymin}#{xmax}#{ymax}"
+
+
+def build_s3_uri_bounding_box_float(s3_uri: str, bounding_box: List[float]) -> str:
+    """
+    Constructs the sort key in the format: s3_uri#xmin#ymin#xmax#ymax,
+    preserving the float values.
+    """
+    xmin, ymin, xmax, ymax = bounding_box
+    return f"{s3_uri}#{xmin}#{ymin}#{xmax}#{ymax}"
 
 
 def find_item_by_s3_and_box(s3_uri: str, bounding_box: List[float]) -> Optional[Dict[str, Any]]:
     """
-    Attempts to find an item via GSI by checking both:
-      1) normal JSON array format (e.g. "[0.27,0.42,0.71,0.98]")
-      2) old DB format (e.g. '[{"N":"0.27"}, ...]')
-
-    If neither query returns an item, returns None.
+    Attempts to find an item in the UDOLabelingQueue table by constructing the sort key in two formats:
+    one with integer coordinates and one with float coordinates.
+    It checks both "UNLABELED" and "LABELED" shards.
+    Returns the item if found; otherwise, returns None.
     """
-    # 1) normal array JSON
-    normal_str = json.dumps(bounding_box)  # e.g. "[0.27,0.42,0.71,0.98]"
-    item = do_gsi_lookup(s3_uri, normal_str)
-    if item:
-        return item
-
-    # 2) old "DB format"
-    db_format_str = convert_box_to_special_format(bounding_box)
-    item = do_gsi_lookup(s3_uri, db_format_str)
-    if item:
-        return item
-
-    # None found
+    int_key = build_s3_uri_bounding_box_int(s3_uri, bounding_box)
+    float_key = build_s3_uri_bounding_box_float(s3_uri, bounding_box)
+    
+    for shard in ["UNLABELED", "LABELED"]:
+        for key in (int_key, float_key):
+            try:
+                resp = table.get_item(Key={"shard": shard, "s3_uri_bounding_box": key})
+                if "Item" in resp:
+                    return resp["Item"]
+            except Exception as e:
+                logger.warning("Error during get_item for shard %s and key %s: %s", shard, key, e)
     return None
-
-
-def do_gsi_lookup(s3_uri: str, box_str: str) -> Optional[Dict[str, Any]]:
-    """
-    Attempt a single GSI query with (s3_uri, box_str).
-    """
-    resp = table.query(
-        IndexName="s3_uri-box-index",  # name of your GSI
-        KeyConditionExpression="s3_uri = :uriVal AND box = :boxVal",
-        ExpressionAttributeValues={
-            ":uriVal": s3_uri,
-            ":boxVal": box_str
-        }
-    )
-    items = resp.get("Items", [])
-    return items[0] if items else None
-
-
-def get_next_crop(old_shard: str, old_created: str) -> Optional[Dict[str, Any]]:
-    unlabeled = query_by_shard("UNLABELED")
-    for it in unlabeled:
-        if it["timestamp"] != old_created:
-            return it
-
-    labeled = query_by_shard("LABELED")
-    for it in labeled:
-        if it["timestamp"] != old_created:
-            return it
-
-    return None
-
 
 def parse_device_from_s3(s3_uri: str) -> str:
     parsed = urlparse(s3_uri)
@@ -414,7 +393,6 @@ def parse_device_from_s3(s3_uri: str) -> str:
                 return part
     # fallback
     return "UNKNOWN-DEVICE"
-
 
 def safely_parse_str_dict(raw_str: str) -> Dict[str, Any]:
     if not raw_str.strip():
@@ -434,77 +412,56 @@ def safely_parse_str_dict(raw_str: str) -> Dict[str, Any]:
 def convert_box_to_float_list(box_data: Any) -> List[float]:
     """
     Converts DynamoDB-stored bounding box data into a list of floats.
-    Supports:
-      - JSON string format: "[x, y, z, w]"
-      - List of Decimal values: [Decimal(x), Decimal(y), Decimal(z), Decimal(w)]
     Logs a warning if format is unexpected.
     """
-    if isinstance(box_data, list):
-        if all(isinstance(x, Decimal) for x in box_data):
-            return [float(x) for x in box_data]
-        if all(isinstance(x, (int, float)) for x in box_data):
-            logger.info("[DEBUG] Bounding box is already a list of floats.")
-            return box_data
     if isinstance(box_data, str):
         try:
-            parsed_data = json.loads(box_data)
-
-            if isinstance(parsed_data, list) and all(isinstance(x, (int, float)) for x in parsed_data):
-                return parsed_data
-
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.warning(f"[WARNING] Failed to parse bounding box string: {box_data}. Error: {e}")
+            parsed = json.loads(box_data)
+            if isinstance(parsed, list):
+                return [float(x) for x in parsed]
+        except Exception as e:
+            logger.warning(f"Failed to parse bounding box string: {box_data}. Error: {e}")
+    elif isinstance(box_data, list):
+        return [float(x) for x in box_data]
     return []
 
-
-def convert_box_to_special_format(box_list: List[float]) -> str:
-    """
-    Convert [0.27, 0.42, 0.71, 0.98] -> '[{"N":"0.27"},{"N":"0.42"},{"N":"0.71"},{"N":"0.98"}]'
-    Old DB format. We only use this to do a fallback GSI query or read old items.
-    """
-    arr = [{"N": str(val)} for val in box_list]
-    return json.dumps(arr)
-
-
 def create_and_upload_crop(original_s3_uri: str, bounding_box: List[float]) -> str:
-    logger.info(f"[DEBUG] Received original_s3_uri: {original_s3_uri}")
-    logger.info(f"[DEBUG] Received bounding_box: {bounding_box}")
+    """
+    Crop the image using absolute pixel coordinates and upload the crop to S3.
+    Raises an error if the bounding_box appears to be normalized (i.e. all values between 0 and 1).
+    """
+    # Ensure the bounding box has exactly 4 values.
+    if len(bounding_box) != 4:
+        raise HTTPException(status_code=400, detail="Bounding box must have exactly 4 values.")
+
+    # If all coordinates are between 0 and 1, assume they are normalized and raise an error.
+    if all(0 <= c <= 1 for c in bounding_box):
+        raise HTTPException(status_code=400, detail="Normalized coordinates detected. Expected absolute pixel values.")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         local_full = os.path.join(tmp_dir, "full.jpg")
         download_s3_uri(original_s3_uri, local_full)
         img = Image.open(local_full)
-        width, height = img.size
-        if len(bounding_box) == 4 and all(0 <= c <= 1 for c in bounding_box):
-            logger.info("[DEBUG] Detected normalized coords => converting to absolute.")
-            # scale x coords by width, y coords by height
-            bounding_box[0] *= width   # xmin
-            bounding_box[2] *= width   # xmax
-            bounding_box[1] *= height  # ymin
-            bounding_box[3] *= height  # ymax
-            logger.info(f"[DEBUG] bounding_box after un‐normalize: {bounding_box}")
 
-            xmin, ymin, xmax, ymax = bounding_box
-            cropped = img.crop((xmin, ymin, xmax, ymax))
+        # Use the provided absolute coordinates directly.
+        xmin, ymin, xmax, ymax = bounding_box
+        cropped = img.crop((xmin, ymin, xmax, ymax))
 
-            base_name = os.path.basename(urlparse(original_s3_uri).path)
-            new_name = f"{os.path.splitext(base_name)[0]}_{uuid.uuid4().hex}.jpg"
-            local_crop = os.path.join(tmp_dir, new_name)
-            cropped.save(local_crop, "JPEG")
+        base_name = os.path.basename(urlparse(original_s3_uri).path)
+        new_name = f"{os.path.splitext(base_name)[0]}_{uuid.uuid4().hex}.jpg"
+        local_crop = os.path.join(tmp_dir, new_name)
+        cropped.save(local_crop, "JPEG")
 
-            embedded_path = os.path.join(tmp_dir, f"meta_{new_name}")
-            final_s3 = f"{CROP_OUTPUT_FOLDER}{new_name}"
-            exif_meta = {
-                "original_s3_uri": original_s3_uri,
-                "s3_file_path": final_s3,
-                # We'll store the final, un‐normalized bounding_box in EXIF
-                "coordinates": bounding_box
-            }
-            embed_exif_metadata(local_crop, embedded_path, exif_meta)
-
-            upload_s3_uri(embedded_path, final_s3)
-            return final_s3
-
+        embedded_path = os.path.join(tmp_dir, f"meta_{new_name}")
+        final_s3 = f"{CROP_OUTPUT_FOLDER}{new_name}"
+        exif_meta = {
+            "original_s3_uri": original_s3_uri,
+            "s3_file_path": final_s3,
+            "coordinates": bounding_box
+        }
+        embed_exif_metadata(local_crop, embedded_path, exif_meta)
+        upload_s3_uri(embedded_path, final_s3)
+        return final_s3
 
 def embed_exif_metadata(input_path: str, output_path: str, metadata: Dict[str, Any]):
     img = Image.open(input_path)
@@ -517,7 +474,6 @@ def embed_exif_metadata(input_path: str, output_path: str, metadata: Dict[str, A
     exif_bytes = piexif.dump(exif_dict)
     img.save(output_path, "JPEG", exif=exif_bytes)
 
-
 def download_s3_uri(s3_uri: str, local_path: str):
     parsed = urlparse(s3_uri)
     bucket = parsed.netloc
@@ -525,14 +481,12 @@ def download_s3_uri(s3_uri: str, local_path: str):
     s3_client = settings.get_s3_client()
     s3_client.download_file(bucket, key, local_path)
 
-
 def upload_s3_uri(local_path: str, s3_uri: str):
     parsed = urlparse(s3_uri)
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
     s3_client = settings.get_s3_client()
     s3_client.upload_file(local_path, bucket, key)
-
 
 def generate_embeddings(crop_s3_uri: str) -> List[float]:
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -543,7 +497,6 @@ def generate_embeddings(crop_s3_uri: str) -> List[float]:
             with torch.no_grad():
                 emb = model.encode_image(img_tensor).cpu().numpy().flatten().tolist()
     return emb
-
 
 def query_pinecone_for_top_match(
     embedding: List[float],

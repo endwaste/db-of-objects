@@ -11,7 +11,7 @@ from PIL import Image
 import torch
 
 from api.config import settings
-from api.model_loader import device, preprocess, model, da_model
+from api.model_loader import preprocess, model, da_model
 import piexif
 import piexif.helper
 import boto3
@@ -21,7 +21,7 @@ router = APIRouter()
 pinecone_index = settings.get_pinecone_index()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --------------------------------------
 # Helper functions
@@ -38,9 +38,15 @@ def generate_embeddings_from_image(image: Image.Image) -> List[float]:
     """
     Use the CLIP model to generate an embedding from a Pillow Image object.
     """
-    img_tensor = preprocess(image).unsqueeze(0).to(device)
+    if not torch.cuda.is_available():
+        model.to("cpu")
+        img_tensor = img_tensor.to("cpu")
+    else:
+        img_tensor = img_tensor.to(device)
+
     with torch.no_grad():
         emb = model.encode_image(img_tensor).cpu().numpy().flatten().tolist()
+    
     return emb
 
 def query_pinecone(embedding: List[float], top_k: int = 1) -> Optional[Dict[str, Any]]:
