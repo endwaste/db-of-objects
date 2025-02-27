@@ -208,6 +208,32 @@ async def similarity_search(
         )
         item = find_item_by_s3_and_box(original_s3_uri, bounding_box)
 
+    # If there's an embedding_id => fetch from Pinecone
+    embedding_id = item.get("embedding_id", "")
+    if embedding_id:
+        pinecone_index = settings.get_pinecone_index()
+        fetch_resp = pinecone_index.fetch(ids=[embedding_id])
+        vector_data = fetch_resp.vectors.get(embedding_id)
+        if vector_data and vector_data.metadata:
+            # Overwrite new_crop_metadata with Pinecone's metadata
+            pinecone_meta = vector_data.metadata
+            # Update DynamoDB
+            table.update_item(
+                Key={
+                    "shard": item["shard"],
+                    "s3_uri_bounding_box": item["s3_uri_bounding_box"]
+                },
+                UpdateExpression="""
+                    SET new_crop_metadata = :ncm,
+                        updated_timestamp = :uts
+                """,
+                ExpressionAttributeValues={
+                    ":ncm": json.dumps(pinecone_meta),
+                    ":uts": now_str
+                }
+            )
+            item["new_crop_metadata"] = json.dumps(pinecone_meta)
+
     # Ensure we have a crop_s3_uri
     if not item.get("crop_s3_uri"):
         new_crop_uri = create_and_upload_crop(original_s3_uri, bounding_box)
