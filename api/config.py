@@ -8,6 +8,8 @@ load_dotenv(".env.development")
 
 class Settings:
     def __init__(self):
+        self.environment = os.getenv("NEXT_PUBLIC_VERCEL_ENV", "development")
+
         # AWS
         self.s3_bucket_name = os.getenv("S3_BUCKET_NAME", "glacier-ml-training")
         self.default_region = os.getenv("AWS_REGION", "us-east-1")
@@ -24,6 +26,13 @@ class Settings:
         self.model_path = os.getenv("MODEL_PATH")
         self.model = os.getenv("MODEL")
         self.model_dim = int(os.getenv("MODEL_DIM", 512))
+
+        # Google OAuth
+        self.google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+        self.google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+        self.google_redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+        self.jwt_secret = os.getenv("JWT_SECRET")
+        self.allowed_emails = os.getenv("ALLOWED_EMAILS", "").split(",")
 
     def get_s3_client(self, region_name=None):
         """Get or create an S3 client for the specified region."""

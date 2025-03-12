@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware  # NEW IMPORT
+
+from api.auth import router as auth_router
 from api.v1.endpoints import (
     text,
     image,
@@ -15,17 +18,17 @@ from api.v1.endpoints import (
 
 app = FastAPI()
 
+# Add session middleware for Authlib
+# Make sure you use a unique, random secret_key in production
+app.add_middleware(SessionMiddleware, secret_key="SOME_LONG_RANDOM_SECRET_KEY")
 
-# Add a simple test route
 @app.get("/api")
 async def root():
     return {"message": "Welcome to the Universal DB of Objects API!"}
 
-
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://udo.endwaste.net", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,3 +46,6 @@ app.include_router(upload.router, prefix="/api")
 app.include_router(review.router, prefix="/api")
 app.include_router(labeling.router, prefix="/api")
 app.include_router(run_models.router, prefix="/api")
+
+# Register Auth Routes
+app.include_router(auth_router, prefix="/api")
