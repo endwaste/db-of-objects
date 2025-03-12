@@ -4,6 +4,7 @@ import logging
 import os
 import tempfile
 import uuid
+import random
 from typing import List, Dict, Any, Optional
 from decimal import Decimal
 
@@ -133,9 +134,9 @@ def get_labeling_list():
 @router.api_route("/similarity", methods=["GET", "POST"])
 async def similarity_search(
     request: Request,
-    original_s3_uri: Optional[str] = Query(None, description="S3 URI of the original image"),
-    bounding_box: Optional[str] = Query(None, description="Bounding box in format xmin,ymin,xmax,ymax"),
-    payload: Optional[SimilarityRequest] = None  # For POST requests
+    original_s3_uri: Optional[str] = Query(None),
+    bounding_box: Optional[str] = Query(None),
+    payload: Optional[SimilarityRequest] = None
 ):
     """
     Supports both:
@@ -145,43 +146,35 @@ async def similarity_search(
     
     now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-    # Determine if request is GET or POST
     if request.method == "GET":
         if not original_s3_uri or not bounding_box:
-            raise HTTPException(status_code=400, detail="Missing required parameters: original_s3_uri and bounding_box")
-        
-        # Convert bounding_box from "100,150,400,600" -> [100, 150, 400, 600]
+            raise HTTPException(400, "Missing required parameters")
         try:
             bounding_box = [int(x) for x in bounding_box.split(",")]
             if len(bounding_box) != 4:
-                raise ValueError("Bounding box must have exactly 4 values.")
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid bounding_box format. Expected format: xmin,ymin,xmax,ymax")
-    
-    elif request.method == "POST":
+                raise ValueError
+        except:
+            raise HTTPException(400, "Invalid bounding_box")
+    else:
         if not payload:
-            raise HTTPException(status_code=400, detail="Invalid request body.")
+            raise HTTPException(400, "Invalid body")
         original_s3_uri = payload.original_s3_uri
         bounding_box = payload.bounding_box
 
-    # Build the unique identifier
     s3_uri_bb = build_s3_uri_bounding_box_int(original_s3_uri, bounding_box)
-
-    # Try to find an existing item
     item = find_item_by_s3_and_box(original_s3_uri, bounding_box)
 
     if not item:
-        # Create a new item in the "UNLABELED" shard
         device = parse_device_from_s3(original_s3_uri)
-
+        pinecone_record = query_pinecone_for_exact_match(original_s3_uri, bounding_box)
         item = {
             "shard": "UNLABELED",
             "s3_uri_bounding_box": s3_uri_bb,
             "device": device,
             "s3_uri": original_s3_uri,
             "box": json.dumps(bounding_box),
-            "embedding_id": "",
-            "crop_s3_uri": "",
+            "embedding_id": (pinecone_record.get("metadata", {}).get("embedding_id", "") if pinecone_record else ""),
+            "crop_s3_uri": (pinecone_record.get("metadata", {}).get("s3_file_path", "") if pinecone_record else ""),
             "similar_crop_s3_uri": "",
             "new_crop_metadata": "",
             "similar_crop_metadata": "",
@@ -194,92 +187,57 @@ async def similarity_search(
         }
         table.put_item(Item=item)
     else:
-        # Mark as "in_progress"
         table.update_item(
             Key={
                 "shard": item["shard"],
-                "s3_uri_bounding_box": item["s3_uri_bounding_box"]
-            },
+                "s3_uri_bounding_box": item["s3_uri_bounding_box"]},
             UpdateExpression="SET in_progress = :ip, updated_timestamp = :uts",
-            ExpressionAttributeValues={
-                ":ip": "true",
-                ":uts": now_str
-            }
+            ExpressionAttributeValues={":ip": "true", ":uts": now_str}
         )
         item = find_item_by_s3_and_box(original_s3_uri, bounding_box)
 
-    # If there's an embedding_id => fetch from Pinecone
     embedding_id = item.get("embedding_id", "")
     if embedding_id:
         pinecone_index = settings.get_pinecone_index()
         fetch_resp = pinecone_index.fetch(ids=[embedding_id])
         vector_data = fetch_resp.vectors.get(embedding_id)
         if vector_data and vector_data.metadata:
-            # Overwrite new_crop_metadata with Pinecone's metadata
             pinecone_meta = vector_data.metadata
-            # Update DynamoDB
             table.update_item(
-                Key={
-                    "shard": item["shard"],
-                    "s3_uri_bounding_box": item["s3_uri_bounding_box"]
-                },
-                UpdateExpression="""
-                    SET new_crop_metadata = :ncm,
-                        updated_timestamp = :uts
-                """,
-                ExpressionAttributeValues={
-                    ":ncm": json.dumps(pinecone_meta),
-                    ":uts": now_str
-                }
+                Key={"shard": item["shard"], "s3_uri_bounding_box": item["s3_uri_bounding_box"]},
+                UpdateExpression="SET new_crop_metadata = :n, updated_timestamp = :u",
+                ExpressionAttributeValues={":n": json.dumps(pinecone_meta), ":u": now_str}
             )
             item["new_crop_metadata"] = json.dumps(pinecone_meta)
 
-    # Ensure we have a crop_s3_uri
     if not item.get("crop_s3_uri"):
         new_crop_uri = create_and_upload_crop(original_s3_uri, bounding_box)
         table.update_item(
-            Key={
-                "shard": item["shard"],
-                "s3_uri_bounding_box": item["s3_uri_bounding_box"]
-            },
-            UpdateExpression="SET crop_s3_uri = :c, updated_timestamp = :uts",
-            ExpressionAttributeValues={
-                ":c": new_crop_uri,
-                ":uts": now_str
-            }
+            Key={"shard": item["shard"], "s3_uri_bounding_box": item["s3_uri_bounding_box"]},
+            UpdateExpression="SET crop_s3_uri = :c, updated_timestamp = :u",
+            ExpressionAttributeValues={":c": new_crop_uri, ":u": now_str}
         )
         item["crop_s3_uri"] = new_crop_uri
 
-    # Generate embeddings and query Pinecone
     embeddings = generate_embeddings(item["crop_s3_uri"])
     top_match = query_pinecone_for_top_match(embeddings, exclude_s3_file_path=item["crop_s3_uri"])
     similar_crop_s3_uri = ""
     similar_metadata = {}
     score = None
-
     if top_match:
         score = top_match["score"]
         similar_metadata = top_match["metadata"]
         similar_crop_s3_uri = similar_metadata.get("s3_file_path", "")
-
         table.update_item(
-            Key={
-                "shard": item["shard"],
-                "s3_uri_bounding_box": item["s3_uri_bounding_box"]
-            },
-            UpdateExpression="""
-                SET similar_crop_s3_uri = :sim_s3,
-                    similar_crop_metadata = :sim_meta,
-                    updated_timestamp = :uts
-            """,
+            Key={"shard": item["shard"], "s3_uri_bounding_box": item["s3_uri_bounding_box"]},
+            UpdateExpression="SET similar_crop_s3_uri = :s, similar_crop_metadata = :m, updated_timestamp = :u",
             ExpressionAttributeValues={
-                ":sim_s3": similar_crop_s3_uri,
-                ":sim_meta": json.dumps(similar_metadata),
-                ":uts": now_str
+                ":s": similar_crop_s3_uri,
+                ":m": json.dumps(similar_metadata),
+                ":u": now_str
             }
         )
 
-    # Generate presigned URLs
     presigned_incoming = settings.generate_presigned_url(item["crop_s3_uri"])
     presigned_similar = settings.generate_presigned_url(similar_crop_s3_uri) if similar_crop_s3_uri else None
 
@@ -291,7 +249,7 @@ async def similarity_search(
         "similar_crop_presigned_url": presigned_similar,
         "similar_crop_metadata": similar_metadata,
         "score": score,
-        "embedding_id": item.get("embedding_id", ""),
+        "embedding_id": embedding_id,
     }
 
 
@@ -553,3 +511,26 @@ def query_pinecone_for_top_match(
     else:
         best = matches[0]
         return {"score": best["score"], "metadata": best.get("metadata", {})}
+
+
+def query_pinecone_for_exact_match(
+    original_s3_uri: str,
+    bounding_box: List[float]
+) -> Optional[Dict[str, Any]]:
+    bounding_box_str = ",".join([str(int(round(coord))) for coord in bounding_box])
+    pinecone_index = settings.get_pinecone_index()
+    random_vector = [random.random() for _ in range(768)]
+    resp = pinecone_index.query(
+        vector=random_vector,
+        filter={
+            "original_s3_uri": original_s3_uri,
+            "coordinates": bounding_box_str
+        },
+        top_k=1,
+        include_metadata=True
+    )
+    matches = resp.get("matches", [])
+    if not matches:
+        return None
+    best_match = matches[0]
+    return {"score": best_match["score"], "metadata": best_match.get("metadata", {})}
