@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware  # NEW IMPORT
+from starlette.middleware.sessions import SessionMiddleware
 
 from api.auth import router as auth_router
 from api.v1.endpoints import (
@@ -14,6 +14,7 @@ from api.v1.endpoints import (
     review,
     labeling,
     run_models,
+    summary,
 )
 
 app = FastAPI()
@@ -46,6 +47,7 @@ app.include_router(upload.router, prefix="/api")
 app.include_router(review.router, prefix="/api")
 app.include_router(labeling.router, prefix="/api")
 app.include_router(run_models.router, prefix="/api")
+app.include_router(summary.router, prefix="/api")
 
 # Register Auth Routes
 app.include_router(auth_router, prefix="/api")

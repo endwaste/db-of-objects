@@ -9,6 +9,7 @@ import SearchForm from './components/SearchForm';
 import UploadModal from './components/UploadModal';
 import FilterPanel from './components/FilterPanel';
 import SlidingMenu from './components/SlidingMenu';
+import DatabaseSummary from './components/DatabaseSummary';
 
 import { track } from '@vercel/analytics';
 import axios from 'axios';
@@ -450,10 +451,7 @@ export default function Home() {
         <SlidingMenu />
         <div className="max-w-8xl w-full px-8 md:px-12 mt-10 mx-auto">
           <Header />
-
           <div className="max-w-xl mx-auto relative ">
-
-
             <SearchForm
               query={query}
               handleInputChange={handleInputChange}
@@ -470,6 +468,12 @@ export default function Home() {
               openModal={openModal}
               setShowSuggestions={setShowSuggestions}
             />
+
+            {results.length === 0 && (
+              <div className="mt-3">
+                <DatabaseSummary />
+              </div>
+            )}
 
             {errorMessage && (
               <div className="w-full mt-4 text-red-500 text-center">
