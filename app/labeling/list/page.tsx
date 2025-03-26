@@ -2,20 +2,31 @@
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import SimilarityModal from "./similarityModal"; 
+import SimilarityModal from "./similarityModal";
 import SlidingMenu from "../../components/SlidingMenu";
 
-// Helper to parse robot name from original_s3_uri
 function getRobotFromS3Uri(s3Uri: string): string {
   const path = s3Uri.replace("s3://", "");
   const parts = path.split("/");
   for (let p of parts) {
     const lower = p.toLowerCase();
-    if (lower.startsWith("gem-") || lower.startsWith("scn-") || lower.startsWith("cv-")) {
+    if (
+      lower.startsWith("gem-") ||
+      lower.startsWith("scn-") ||
+      lower.startsWith("cv-")
+    ) {
       return p;
     }
   }
   return "UNKNOWN";
+}
+
+// Helper to parse robot name from original_s3_uri
+function getFolderForItem(item: CropItem): string {
+  if (item.dest_folder) {
+    return item.dest_folder;
+  }
+  return getRobotFromS3Uri(item.original_s3_uri);
 }
 
 // Adjust to your environment logic
@@ -39,6 +50,7 @@ interface CropItem {
   labeled: boolean;
   labeler_name: string;
   difficult: boolean;
+  dest_folder?: string | null;
 }
 
 interface SimilarityResult {
@@ -70,7 +82,9 @@ export default function CropListPage() {
   const [difficult, setDifficult] = useState(false);
   const [dynamoDBHadIncoming, setDynamoDBHadIncoming] = useState(false);
 
-  const [similarityData, setSimilarityData] = useState<SimilarityResult | null>(null);
+  const [similarityData, setSimilarityData] = useState<SimilarityResult | null>(
+    null
+  );
   const [showModal, setShowModal] = useState(false);
 
   // 5) Track which row is selected
@@ -95,7 +109,7 @@ export default function CropListPage() {
         // Group by robot
         const tempRobotMap: Record<string, CropItem[]> = {};
         for (const crop of fetchedCrops) {
-          const robot = getRobotFromS3Uri(crop.original_s3_uri);
+          const robot = getFolderForItem(crop);
           if (!tempRobotMap[robot]) {
             tempRobotMap[robot] = [];
           }
@@ -166,7 +180,9 @@ export default function CropListPage() {
 
       // Save “original” states for detection of changes
       setOriginalIncoming(JSON.parse(JSON.stringify(incoming)));
-      setOriginalSimilar(JSON.parse(JSON.stringify(result.similar_crop_metadata)));
+      setOriginalSimilar(
+        JSON.parse(JSON.stringify(result.similar_crop_metadata))
+      );
 
       // Set final similarityData w updated incoming
       setSimilarityData({
@@ -190,7 +206,7 @@ export default function CropListPage() {
   }
 
   // --------------------------------------------------------------------------
-  // "Add to UDO" logic 
+  // "Add to UDO" logic
   // --------------------------------------------------------------------------
   async function handleAddToUDO() {
     if (!similarityData) {
@@ -220,7 +236,7 @@ export default function CropListPage() {
       formData.append("pick_point", inc.pick_point || "");
       formData.append("modifier", inc.modifier || "");
       formData.append("comment", "");
-      formData.append("labeler_name", labelerName || "");
+      formData.append("labeler_name", inc.labeler_name || "");
 
       const resp = await fetch(`${BASE_API}/api/new`, {
         method: "POST",
@@ -267,7 +283,7 @@ export default function CropListPage() {
     if (!similarityData) return;
 
     // 1) finalize the current item
-    await finalizeCurrentItem(); 
+    await finalizeCurrentItem();
 
     // 2) find the next unlabeled item in selectedRobotCrops
     const idx = selectedRobotCrops.findIndex(
@@ -293,7 +309,7 @@ export default function CropListPage() {
   // --------------------------------------------------------------------------
   async function handleFinish() {
     if (!similarityData) return;
-    await finalizeCurrentItem(); 
+    await finalizeCurrentItem();
     alert("Crop updated. Labeling session ended.");
     handleCloseModal();
   }
@@ -310,7 +326,7 @@ export default function CropListPage() {
     let updateSimilarPromise = Promise.resolve();
     let updateIncomingPromise = Promise.resolve();
 
-    // If similar metadata changed => update
+    // If similar metadata changed => update Pinecone/CSV
     if (JSON.stringify(currentSimilar) !== JSON.stringify(originalSimilar)) {
       const simEmbeddingId = currentSimilar.embedding_id;
       if (simEmbeddingId) {
@@ -321,8 +337,9 @@ export default function CropListPage() {
         formDataSim.append("shape", currentSimilar.shape || "");
         formDataSim.append("comment", currentSimilar.comment || "");
         formDataSim.append("modifier", currentSimilar.modifier || "");
-        formDataSim.append("labeler_name", labelerName || "");
+        formDataSim.append("labeler_name", currentSimilar.labeler_name || "");
         formDataSim.append("pick_point", currentSimilar.pick_point || "");
+
         updateSimilarPromise = axios.put(
           `${BASE_API}/api/update/${simEmbeddingId}`,
           formDataSim,
@@ -331,7 +348,7 @@ export default function CropListPage() {
       }
     }
 
-    // If incoming metadata changed => update
+    // If incoming metadata changed => update Pinecone/CSV
     if (
       JSON.stringify(currentIncoming) !== JSON.stringify(originalIncoming) &&
       similarityData.embedding_id
@@ -343,8 +360,10 @@ export default function CropListPage() {
       formDataIn.append("shape", currentIncoming.shape || "");
       formDataIn.append("comment", currentIncoming.comment || "");
       formDataIn.append("modifier", currentIncoming.modifier || "");
-      formDataIn.append("labeler_name", labelerName || "");
+      // NEW: get labeler from the *incoming* metadata
+      formDataIn.append("labeler_name", currentIncoming.labeler_name || "");
       formDataIn.append("pick_point", currentIncoming.pick_point || "");
+
       updateIncomingPromise = axios.put(
         `${BASE_API}/api/update/${similarityData.embedding_id}`,
         formDataIn,
@@ -354,16 +373,15 @@ export default function CropListPage() {
 
     await Promise.all([updateSimilarPromise, updateIncomingPromise]);
 
-    // Now update the DB row
+    // Now also update the DB row
     const updatePayload = {
       original_s3_uri: selectedOriginalS3Uri,
       bounding_box: selectedBoundingBox,
-      labeler_name: labelerName || "",
+      labeler_name: labelerName || "", // This is for Dynamo
       difficult: difficult,
       incoming_crop_metadata: currentIncoming,
       similar_crop_metadata: currentSimilar,
-      embedding_id: similarityData.embedding_id || ""
-      // no 'action' here
+      embedding_id: similarityData.embedding_id || "",
     };
 
     try {
@@ -372,8 +390,6 @@ export default function CropListPage() {
         updatePayload,
         { headers: { "Content-Type": "application/json" } }
       );
-      // We do not show success messages for "next" in the normal flow
-      // We'll show them only in handleFinish or if there's no next item
       console.log("finalizeCurrentItem response:", dynamoResp.data);
     } catch (error) {
       console.error("Error updating DynamoDB:", error);
@@ -393,7 +409,8 @@ export default function CropListPage() {
     totalCount = selectedRobotCrops.length;
     labeledCount = selectedRobotCrops.filter((c) => c.labeled).length;
   }
-  const labeledPercent = totalCount === 0 ? 0 : (labeledCount / totalCount) * 100;
+  const labeledPercent =
+    totalCount === 0 ? 0 : (labeledCount / totalCount) * 100;
 
   return (
     <div style={{ background: "#f3f4f6" }}>
@@ -401,15 +418,34 @@ export default function CropListPage() {
       <SlidingMenu />
 
       {/* Main Content */}
-      <div style={{ padding: "2.5rem", fontFamily: "'Inter', sans-serif", minHeight: "100vh", textAlign: "center" }}>
+      <div
+        style={{
+          padding: "2.5rem",
+          fontFamily: "'Inter', sans-serif",
+          minHeight: "100vh",
+          textAlign: "center",
+        }}
+      >
         {/* Logo Image Centered */}
-        <img 
-          src="https://endwaste.io/assets/logo_footer.png" 
+        <img
+          src="https://endwaste.io/assets/logo_footer.png"
           alt="Glacier Logo"
-          style={{ width: "80px", height: "auto", marginBottom: "0.5rem", display: "block", marginLeft: "auto", marginRight: "auto" }} 
+          style={{
+            width: "80px",
+            height: "auto",
+            marginBottom: "0.5rem",
+            display: "block",
+            marginLeft: "auto",
+            marginRight: "auto",
+          }}
         />
         <div className="text-center">
-          <h1 className="font-sans text-4xl mb-3" style={{color:"#466CD9"}}>Universal database of objects</h1>
+          <h1
+            className="font-sans text-4xl mb-3"
+            style={{ color: "#466CD9" }}
+          >
+            Universal database of objects
+          </h1>
         </div>
 
         {loading && <p>Loading crops...</p>}
@@ -423,16 +459,17 @@ export default function CropListPage() {
 
             {robots.length === 0 && <p>No data found.</p>}
 
-            {/* Centered folder icons with shadows */}
-            <div style={{ 
-              display: "flex", 
-              flexWrap: "wrap", 
-              gap: "2rem", 
-              justifyContent: "center", 
-              alignItems: "center", 
-              maxWidth: "90%", 
-              margin: "0 auto"
-            }}>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "2rem",
+                justifyContent: "center",
+                alignItems: "center",
+                maxWidth: "90%",
+                margin: "0 auto",
+              }}
+            >
               {robots.map((robot) => {
                 const itemCount = robotMap[robot].length;
                 return (
@@ -451,14 +488,34 @@ export default function CropListPage() {
                         width: "100px",
                         height: "100px",
                         marginBottom: "8px",
-                        filter: "drop-shadow(2px 2px 2px rgba(0,0,0,0.2))",
+                        filter:
+                          "drop-shadow(2px 2px 2px rgba(0,0,0,0.2))",
                         transition: "filter 0.2s ease-in-out",
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.filter = "drop-shadow(2px 2px 2px rgba(0,0,255,0.4))")}
-                      onMouseLeave={(e) => (e.currentTarget.style.filter = "drop-shadow(2px 2px 2px rgba(0,0,0,0.2))")}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.filter =
+                          "drop-shadow(2px 2px 2px rgba(0,0,255,0.4))")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.filter =
+                          "drop-shadow(2px 2px 2px rgba(0,0,0,0.2))")
+                      }
                     />
-                    <div style={{ fontWeight: "600", fontSize: "16px", color: "#374151", textTransform: "uppercase" }}>{robot}</div>
-                    <div style={{ fontSize: "12px", color: "#6B7280" }}>{itemCount} items</div>
+                    <div
+                      style={{
+                        fontWeight: "600",
+                        fontSize: "16px",
+                        color: "#374151",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {robot}
+                    </div>
+                    <div
+                      style={{ fontSize: "12px", color: "#6B7280" }}
+                    >
+                      {itemCount} items
+                    </div>
                   </div>
                 );
               })}
@@ -466,16 +523,17 @@ export default function CropListPage() {
           </div>
         )}
 
-        {/* If a robot is selected => show the robot's table + back button + progress bar */}
         {selectedRobot && (
           <div>
             {/* Container for back button and title */}
-            <div style={{ 
-              position: "relative", 
-              width: "100%",
-              margin: "0 auto",
-              paddingBottom: "1rem"
-            }}>
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                margin: "0 auto",
+                paddingBottom: "1rem",
+              }}
+            >
               {/* Back Button with Arrow - Aligned Left */}
               <button
                 onClick={() => {
@@ -497,16 +555,18 @@ export default function CropListPage() {
               </button>
 
               {/* Robot Title - Centered */}
-              <h2 style={{ 
-                fontSize: "16px", 
-                fontWeight: "600", 
-                color: "#1F2937", 
-                textTransform: "uppercase", 
-                margin: "0 auto", 
-                textAlign: "center",
-                display: "block",
-                width: "fit-content"
-              }}>
+              <h2
+                style={{
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  color: "#1F2937",
+                  textTransform: "uppercase",
+                  margin: "0 auto",
+                  textAlign: "center",
+                  display: "block",
+                  width: "fit-content",
+                }}
+              >
                 {selectedRobot}
               </h2>
             </div>
@@ -525,11 +585,50 @@ export default function CropListPage() {
                 }}
               >
                 <thead>
-                  <tr style={{ background: "#E5E7EB", fontSize: "15px", fontWeight: "600", color: "#374151" }}>
-                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Original S3 URI</th>
-                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Bounding Box</th>
-                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Reviewed?</th>
-                    <th style={{ padding: "12px", borderBottom: "2px solid #D1D5DB", textAlign: "left" }}>Labeler</th>
+                  <tr
+                    style={{
+                      background: "#E5E7EB",
+                      fontSize: "15px",
+                      fontWeight: "600",
+                      color: "#374151",
+                    }}
+                  >
+                    <th
+                      style={{
+                        padding: "12px",
+                        borderBottom: "2px solid #D1D5DB",
+                        textAlign: "left",
+                      }}
+                    >
+                      Original S3 URI
+                    </th>
+                    <th
+                      style={{
+                        padding: "12px",
+                        borderBottom: "2px solid #D1D5DB",
+                        textAlign: "left",
+                      }}
+                    >
+                      Bounding Box
+                    </th>
+                    <th
+                      style={{
+                        padding: "12px",
+                        borderBottom: "2px solid #D1D5DB",
+                        textAlign: "left",
+                      }}
+                    >
+                      Reviewed?
+                    </th>
+                    <th
+                      style={{
+                        padding: "12px",
+                        borderBottom: "2px solid #D1D5DB",
+                        textAlign: "left",
+                      }}
+                    >
+                      Labeler
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -542,16 +641,33 @@ export default function CropListPage() {
                         borderBottom: "1px solid #E5E7EB",
                         transition: "background 0.2s ease-in-out",
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "#F9FAFB")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background = "#F9FAFB")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background = "transparent")
+                      }
                     >
-                      <td style={{ padding: "12px", wordBreak: "break-word", color: "#1F2937", fontWeight: "500" }}>
+                      <td
+                        style={{
+                          padding: "12px",
+                          wordBreak: "break-word",
+                          color: "#1F2937",
+                          fontWeight: "500",
+                        }}
+                      >
                         {crop.original_s3_uri}
                       </td>
                       <td style={{ padding: "12px", color: "#4B5563" }}>
                         {crop.bounding_box.join(", ")}
                       </td>
-                      <td style={{ padding: "12px", fontWeight: "600", color: crop.labeled ? "#10B981" : "#EF4444" }}>
+                      <td
+                        style={{
+                          padding: "12px",
+                          fontWeight: "600",
+                          color: crop.labeled ? "#10B981" : "#EF4444",
+                        }}
+                      >
                         {crop.labeled ? "Yes" : "No"}
                       </td>
                       <td style={{ padding: "12px", color: "#4B5563" }}>
@@ -564,27 +680,36 @@ export default function CropListPage() {
             </div>
 
             {/* Wider Progress Bar */}
-            <div style={{ 
-              margin: "12px 0", 
-              width: "100%", 
-              background: "#E5E7EB", 
-              height: "14px", 
-              borderRadius: "6px",
-              overflow: "hidden"
-            }}>
+            <div
+              style={{
+                margin: "12px 0",
+                width: "100%",
+                background: "#E5E7EB",
+                height: "14px",
+                borderRadius: "6px",
+                overflow: "hidden",
+              }}
+            >
               <div
                 style={{
                   height: "100%",
-                  width: `${(totalCount === 0 ? 0 : (labeledCount / totalCount) * 100).toFixed(1)}%`,
-                  background: labeledCount === totalCount ? "#10B981" : "#3B82F6",
+                  width: `${labeledPercent.toFixed(1)}%`,
+                  background:
+                    labeledCount === totalCount ? "#10B981" : "#3B82F6",
                   borderRadius: "6px",
                   transition: "width 0.3s",
                 }}
               />
             </div>
-            <p style={{ fontSize: "14px", color: "#4B5563", fontWeight: "500" }}>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "#4B5563",
+                fontWeight: "500",
+              }}
+            >
               {labeledCount} / {totalCount} labeled (
-              {(totalCount === 0 ? 0 : (labeledCount / totalCount) * 100).toFixed(1)}%)
+              {labeledPercent.toFixed(1)}%)
             </p>
           </div>
         )}

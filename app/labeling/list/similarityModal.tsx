@@ -42,7 +42,7 @@ interface SimilarityModalProps {
   similarityData: SimilarityResult | null;
 
   dynamoDBHadIncoming: boolean;
-  labelerName: string;
+  labelerName: string; // from parent
   setLabelerName: (val: string) => void;
   difficult: boolean;
   setDifficult: (val: boolean) => void;
@@ -124,7 +124,7 @@ export default function SimilarityModal({
   showModal,
   similarityData,
   dynamoDBHadIncoming,
-  labelerName,
+  labelerName, // parent's labelerName state
   setLabelerName,
   difficult,
   setDifficult,
@@ -137,15 +137,39 @@ export default function SimilarityModal({
   const [showIncomingOverlay, setShowIncomingOverlay] = useState(false);
   const [showSimilarOverlay, setShowSimilarOverlay] = useState(false);
 
-  // If not visible or no data => return null
   if (!showModal || !similarityData) {
     return null;
   }
 
-  // We'll define 'data' as definitely non-null
   const data = similarityData;
 
-  // 1) Called when user edits incoming metadata
+  // -------------------------------
+  // Option A Implementation:
+  // Whenever user changes the labelerName text,
+  // also copy it into the crop metadata objects
+  // so that the difference is detected in finalizeCurrentItem().
+  // -------------------------------
+  function handleLabelerNameChange(newVal: string) {
+    setLabelerName(newVal);
+
+    // Also store in incoming & similar so that finalizeCurrentItem()
+    // sees it as changed
+    const updatedIncoming = {
+      ...data.incoming_crop_metadata,
+      labeler_name: newVal,
+    };
+    const updatedSimilar = {
+      ...data.similar_crop_metadata,
+      labeler_name: newVal,
+    };
+
+    onUpdateSimilarityData({
+      ...data,
+      incoming_crop_metadata: updatedIncoming,
+      similar_crop_metadata: updatedSimilar,
+    });
+  }
+
   function handleIncomingMetaChange(updated: Record<string, any>) {
     onUpdateSimilarityData({
       ...data,
@@ -153,7 +177,6 @@ export default function SimilarityModal({
     } as SimilarityResult);
   }
 
-  // 2) Called when user edits similar metadata
   function handleSimilarMetaChange(updated: Record<string, any>) {
     onUpdateSimilarityData({
       ...data,
@@ -161,7 +184,7 @@ export default function SimilarityModal({
     } as SimilarityResult);
   }
 
-  // 3) Add pick point for "Incoming Crop"
+  // Add pick point for "Incoming Crop"
   function handleIncomingImgClick(e: React.MouseEvent<HTMLImageElement>) {
     if (!showIncomingOverlay) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -182,7 +205,7 @@ export default function SimilarityModal({
     } as SimilarityResult);
   }
 
-  // 4) Add pick point for "Similar Crop"
+  // Add pick point for "Similar Crop"
   function handleSimilarImgClick(e: React.MouseEvent<HTMLImageElement>) {
     if (!showSimilarOverlay) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -203,7 +226,6 @@ export default function SimilarityModal({
     } as SimilarityResult);
   }
 
-  // 5) Clear all pick points
   function handleClearPickPoints(isIncoming: boolean) {
     if (isIncoming) {
       onUpdateSimilarityData({
@@ -224,7 +246,7 @@ export default function SimilarityModal({
     }
   }
 
-  // 6) If embedding_id => show "Delete from UDO", else => "Add to UDO"
+  // If embedding_id => "Delete from UDO", else => "Add to UDO"
   async function handleDeleteFromUDO() {
     if (!data.embedding_id) return;
 
@@ -234,7 +256,6 @@ export default function SimilarityModal({
       });
 
       alert("Deleted from UDO!");
-      // Clear embedding_id from local so the UI flips back
       onUpdateSimilarityData({
         ...data,
         embedding_id: null,
@@ -263,6 +284,7 @@ export default function SimilarityModal({
     const arr = parsePickPoints(data.incoming_crop_metadata.pick_point);
     return arr.length > 0 ? "Re-select pick points" : "Select pick points";
   }
+
   function getSimilarButtonLabel(): string {
     if (showSimilarOverlay) {
       return "Finish selecting";
@@ -516,12 +538,7 @@ export default function SimilarityModal({
                       fontSize: "14px",
                     }}
                   >
-                    {showSimilarOverlay
-                      ? "Finish selecting"
-                      : parsePickPoints(data.similar_crop_metadata.pick_point)
-                          .length > 0
-                      ? "Re-select pick points"
-                      : "Select pick points"}
+                    {getSimilarButtonLabel()}
                   </button>
 
                   <button
@@ -560,7 +577,8 @@ export default function SimilarityModal({
             <input
               type="text"
               value={labelerName}
-              onChange={(e) => setLabelerName(e.target.value)}
+              // NEW: call a function that sets local state + updates metadata
+              onChange={(e) => handleLabelerNameChange(e.target.value)}
               style={{
                 padding: "4px 6px",
                 borderRadius: "4px",

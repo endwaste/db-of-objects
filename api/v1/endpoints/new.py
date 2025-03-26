@@ -9,7 +9,6 @@ from api.config import settings
 from api.model_loader import model, device, preprocess
 from api import deps
 from datetime import datetime, timezone
-from pinecone import Pinecone
 import uuid
 import os
 import logging
@@ -24,7 +23,6 @@ logger = logging.getLogger(__name__)
 index = settings.get_pinecone_index()
 
 router = APIRouter()
-
 
 @router.post("/new")
 async def add_new_data(
@@ -181,17 +179,10 @@ async def add_new_data(
 def extract_metadata_from_user_comment(image_contents: bytes) -> dict:
     """
     Extract metadata from the EXIF UserComment field in an image.
-
-    Args:
-        image_contents (bytes): The image file contents.
-
-    Returns:
-        dict: Metadata extracted from the UserComment field.
     """
     try:
         with Image.open(io.BytesIO(image_contents)) as img:
             exif_data = piexif.load(img.info.get("exif", b""))
-
             user_comment = exif_data["Exif"].get(piexif.ExifIFD.UserComment, b"")
 
             if not user_comment:
@@ -199,7 +190,6 @@ def extract_metadata_from_user_comment(image_contents: bytes) -> dict:
                 return {}
 
             extracted_metadata = piexif.helper.UserComment.load(user_comment)
-
             metadata_dict = ast.literal_eval(extracted_metadata)
             return metadata_dict
 
@@ -210,13 +200,7 @@ def extract_metadata_from_user_comment(image_contents: bytes) -> dict:
 
 def check_duplicate_in_pinecone(metadata: dict) -> bool:
     """
-    Check if a duplicate entry exists in Pinecone.
-
-    Args:
-        metadata (dict): Metadata fields to check for duplication.
-
-    Returns:
-        bool: True if a duplicate exists, False otherwise.
+    Check if a duplicate entry exists in Pinecone by using metadata as a filter.
     """
     logger.info("Checking for duplicates in Pinecone...")
     try:
@@ -230,7 +214,7 @@ def check_duplicate_in_pinecone(metadata: dict) -> bool:
                 "modifier": metadata.get("modifier"),
                 "original_s3_uri": metadata.get("original_s3_uri"),
             }.items()
-            if value is not None
+            if value
         }
 
         query_response = index.query(
@@ -254,12 +238,6 @@ def check_duplicate_in_pinecone(metadata: dict) -> bool:
 def extract_metadata_from_original_s3_uri(original_s3_uri: str):
     """
     Extract robot name and datetime taken from the S3 URI.
-
-    Args:
-        original_s3_uri (str): The URI of the S3 file.
-
-    Returns:
-        Tuple[str, str]: A tuple containing the robot name and the datetime taken in ISO 8601 format.
     """
     logger.info(f"Extracting metadata from S3 URI: {original_s3_uri}")
 
@@ -293,30 +271,18 @@ def extract_metadata_from_original_s3_uri(original_s3_uri: str):
 async def generate_image_embeddings(image_contents: bytes):
     """
     Generate embeddings for the uploaded image using the CLIP model.
-
-    Args:
-        image_contents (bytes): The image file contents.
-
-    Returns:
-        list: Generated embeddings.
     """
     try:
         with io.BytesIO(image_contents) as buffer:
             with Image.open(buffer) as img:
                 img.verify()
-                logger.info("Image verified successfully.")
-
                 buffer.seek(0)
                 img = Image.open(buffer)
-
                 processed_image = preprocess(img).unsqueeze(0).to(device)
-
         with torch.no_grad():
             embeddings = model.encode_image(processed_image).cpu().numpy().tolist()[0]
-
         logger.info("Image embeddings generated successfully.")
         return embeddings
-
     except Exception as e:
         logger.error(f"Error processing image: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Error processing image: {str(e)}")
@@ -325,16 +291,8 @@ async def generate_image_embeddings(image_contents: bytes):
 def save_to_pinecone(embeddings, metadata):
     """
     Save image embeddings and metadata to Pinecone.
-
-    Args:
-        embeddings (list[float]): The image embedding vector.
-        metadata (dict): All associated metadata for the embedding, including the embedding_id.
-
-    Raises:
-        HTTPException: If an error occurs while saving to Pinecone.
     """
     logger.info("Saving data to Pinecone...")
-
     try:
         embedding_id = metadata.get("embedding_id")
         if not embedding_id:
@@ -354,8 +312,6 @@ def save_to_pinecone(embeddings, metadata):
                 "metadata": metadata,
             }
         ]
-
-        logger.info(f"Upserting vector to Pinecone: {vector}")
         index.upsert(vector)
         return embedding_id
 
@@ -369,9 +325,6 @@ def save_to_pinecone(embeddings, metadata):
 def append_metadata_to_s3(metadata: dict) -> None:
     """
     Append the metadata to a CSV file in S3, including the embedding ID.
-
-    Args:
-        metadata (dict): A dictionary containing metadata fields.
     """
     s3_client = settings.get_s3_client()
     bucket_name = settings.s3_bucket_name
@@ -385,6 +338,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             temp_file_name = temp_file.name
 
+            # If file exists, download it; otherwise, create it with headers
             if file_exists:
                 logger.info(f"Downloading existing CSV from S3: {csv_key}")
                 s3_client.download_file(bucket_name, csv_key, temp_file_name)
@@ -407,6 +361,7 @@ def append_metadata_to_s3(metadata: dict) -> None:
                             "robot",
                             "datetime_taken",
                             "comment",
+                            "labeler_name",
                             "modifier",
                             "status",
                             "pick_point",
@@ -429,14 +384,13 @@ def append_metadata_to_s3(metadata: dict) -> None:
                         metadata.get("robot", ""),
                         metadata.get("datetime_taken", ""),
                         metadata.get("comment", ""),
+                        metadata.get("labeler_name", ""),
                         metadata.get("modifier", ""),
                         metadata.get("status", ""),
                         metadata.get("pick_point", ""),
                     ]
                 )
-                logger.info(
-                    "Appended new metadata to the temporary CSV file, including embedding ID."
-                )
+                logger.info("Appended new metadata row (including labeler_name).")
 
             logger.info(
                 f"Uploading updated CSV back to S3: bucket={bucket_name}, key={csv_key}"
@@ -454,14 +408,12 @@ def append_metadata_to_s3(metadata: dict) -> None:
 def parse_pick_points_from_string(pick_point_str: str) -> List[List[float]]:
     """
     Parse a pick point string that may contain one or multiple points.
-    Expected formats:
-      - "x,y" for a single pick point
-      - "x1,y1;x2,y2;..." for multiple pick points
+    Format: "x1,y1;x2,y2;...".
     Returns a list of [x, y] pairs.
     """
     if not pick_point_str:
         raise HTTPException(status_code=400, detail="pick_point is required.")
-    
+
     points = pick_point_str.strip().split(";")
     parsed_points = []
     for point in points:
@@ -469,7 +421,7 @@ def parse_pick_points_from_string(pick_point_str: str) -> List[List[float]]:
         if len(coords) != 2:
             raise HTTPException(
                 status_code=400,
-                detail="Each pick point must contain exactly two comma-separated numbers."
+                detail="Each pick point must have two comma-separated numbers."
             )
         try:
             x = float(coords[0].strip())
@@ -485,9 +437,6 @@ def parse_pick_points_from_string(pick_point_str: str) -> List[List[float]]:
 
 def format_pick_points(parsed_points: List[List[float]]) -> str:
     """
-    Format the list of pick points into a string.
-    Returns:
-      - "x,y" if only one point exists.
-      - "x1,y1;x2,y2;..." if multiple points exist.
+    Format the list of pick points into the string "x1,y1;x2,y2;...".
     """
     return ";".join(f"{pt[0]},{pt[1]}" for pt in parsed_points)

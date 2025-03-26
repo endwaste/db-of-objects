@@ -95,9 +95,7 @@ async def fetch_metadata_from_pinecone(embedding_id: str) -> dict:
         )
 
 
-async def update_pinecone(
-    embedding_id: str, updated_metadata: dict, current_vector: list
-):
+async def update_pinecone(embedding_id: str, updated_metadata: dict, current_vector: list):
     """Update the existing entry in Pinecone with new metadata."""
     try:
         vector = [
@@ -116,7 +114,10 @@ async def update_pinecone(
 
 
 async def update_csv_in_s3(updated_metadata: dict):
-    """Update the CSV file in S3 with the new metadata."""
+    """
+    Update the CSV file in S3 with the new metadata row.
+    Ensures labeler_name is in the CSV headers and updated row.
+    """
     logger.info("Updating CSV in S3...")
     s3_client = settings.get_s3_client()
     bucket_name = settings.s3_bucket_name
@@ -128,43 +129,47 @@ async def update_csv_in_s3(updated_metadata: dict):
             response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=csv_key)
             file_exists = "Contents" in response
 
-            if file_exists:
-                logger.info(f"Downloading existing CSV from S3: {csv_key}")
-                s3_client.download_file(bucket_name, csv_key, temp_file_name)
-                logger.info("Existing CSV downloaded successfully.")
+            if not file_exists:
+                logger.warning("CSV does not exist in S3; cannot update a non-existent file.")
+                return
 
-                updated_rows = []
-                with open(temp_file_name, mode="r", newline="") as f:
-                    reader = csv.DictReader(f)
-                    if "id" not in reader.fieldnames:
-                        raise ValueError("CSV file is missing the 'id' column in headers.")
+            logger.info(f"Downloading existing CSV from S3: {csv_key}")
+            s3_client.download_file(bucket_name, csv_key, temp_file_name)
+            logger.info("CSV downloaded successfully.")
 
-                    for row in reader:
-                        if row.get("id") == updated_metadata["embedding_id"]:
-                            # Update these fields
-                            row["color"] = updated_metadata.get("color", row.get("color", ""))
-                            row["material"] = updated_metadata.get("material", row.get("material", ""))
-                            row["brand"] = updated_metadata.get("brand", row.get("brand", ""))
-                            row["shape"] = updated_metadata.get("shape", row.get("shape", ""))
-                            row["comment"] = updated_metadata.get("comment", row.get("comment", ""))
-                            row["modifier"] = updated_metadata.get("modifier", row.get("modifier", ""))
-                            row["status"] = updated_metadata.get("status", row.get("status", ""))
-                            row["pick_point"] = updated_metadata.get("pick_point", row.get("pick_point", ""))
-                        updated_rows.append(row)
+            updated_rows = []
+            with open(temp_file_name, mode="r", newline="") as f:
+                reader = csv.DictReader(f)
+                if "id" not in reader.fieldnames:
+                    raise ValueError("CSV file missing required 'id' column in headers.")
 
-                with open(temp_file_name, mode="w", newline="") as f:
-                    fieldnames = (
-                        reader.fieldnames if reader.fieldnames else updated_metadata.keys()
-                    )
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
-                    writer.writeheader()
-                    writer.writerows(updated_rows)
+                # Ensure labeler_name column is in the headers
+                fieldnames = list(reader.fieldnames)
+                if "labeler_name" not in fieldnames:
+                    fieldnames.insert(fieldnames.index("comment") + 1, "labeler_name")
 
-                logger.info(f"Uploading updated CSV back to S3: bucket={bucket_name}, key={csv_key}")
-                s3_client.upload_file(temp_file_name, bucket_name, csv_key)
-                logger.info("Updated CSV uploaded to S3 successfully.")
-            else:
-                logger.warning("CSV does not exist. Cannot update.")
+                for row in reader:
+                    if row.get("id") == updated_metadata["embedding_id"]:
+                        # Update fields
+                        row["color"] = updated_metadata.get("color", row.get("color", ""))
+                        row["material"] = updated_metadata.get("material", row.get("material", ""))
+                        row["brand"] = updated_metadata.get("brand", row.get("brand", ""))
+                        row["shape"] = updated_metadata.get("shape", row.get("shape", ""))
+                        row["comment"] = updated_metadata.get("comment", row.get("comment", ""))
+                        row["modifier"] = updated_metadata.get("modifier", row.get("modifier", ""))
+                        row["pick_point"] = updated_metadata.get("pick_point", row.get("pick_point", ""))
+                        row["status"] = updated_metadata.get("status", row.get("status", ""))
+                        row["labeler_name"] = updated_metadata.get("labeler_name", row.get("labeler_name", ""))
+                    updated_rows.append(row)
+
+            with open(temp_file_name, mode="w", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(updated_rows)
+
+            logger.info(f"Uploading updated CSV back to S3: {csv_key}")
+            s3_client.upload_file(temp_file_name, bucket_name, csv_key)
+            logger.info("Updated CSV uploaded to S3 successfully.")
 
     except ValueError as ve:
         logger.error(f"ValueError: {str(ve)}")
@@ -186,6 +191,9 @@ def parse_pick_points_from_string(pick_point_str: str) -> List[List[float]]:
     Returns a list of [x, y] pairs.
     Raises 400 if invalid.
     """
+    if not pick_point_str:
+        raise HTTPException(status_code=400, detail="pick_point is required.")
+
     points = pick_point_str.strip().split(";")
     parsed_points = []
     for point in points:
