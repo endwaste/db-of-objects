@@ -229,7 +229,7 @@ export default function SimilarityModal({
     if (!data.embedding_id) return;
 
     try {
-      await axios.post(`${API_URL}/delete`, {
+      await axios.post(`${API_URL}/api/delete`, {
         embedding_id: data.embedding_id,
       });
 
