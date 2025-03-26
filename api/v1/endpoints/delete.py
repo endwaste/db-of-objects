@@ -4,10 +4,14 @@ import tempfile
 import csv
 import logging
 from pydantic import BaseModel
+import boto3
 
 logger = logging.getLogger(__name__)
 
-
+# DynamoDB Setup
+DDB_TABLE_NAME = "UDOLabelingQueue"
+dynamodb = boto3.resource("dynamodb", region_name=settings.default_region)
+table = dynamodb.Table(DDB_TABLE_NAME)
 class DeleteRequest(BaseModel):
     embedding_id: str
 
@@ -42,6 +46,7 @@ async def delete_entry(delete_request: DeleteRequest):
         logger.info(f"Removed embedding_id={embedding_id} from Pinecone.")
 
         update_metadata_status_in_s3(embedding_id, "inactive")
+        remove_embedding_from_dynamodb(embedding_id)
 
         return {
             "status": "success",
@@ -102,3 +107,30 @@ def update_metadata_status_in_s3(embedding_id: str, new_status: str) -> None:
         raise HTTPException(
             status_code=500, detail=f"Error updating metadata status in S3: {str(e)}"
         )
+
+
+def remove_embedding_from_dynamodb(embedding_id: str):
+    """
+    Search both 'UNLABELED' and 'LABELED' shards for any items with embedding_id = <embedding_id>.
+    Remove only the 'embedding_id' attribute from the item, and leave the rest of the row intact.
+    If no items found, do nothing (and do not raise an error).
+    """
+    for shard in ["UNLABELED", "LABELED"]:
+        resp = table.scan(
+            FilterExpression="attribute_exists(embedding_id) AND embedding_id = :eid",
+            ExpressionAttributeValues={":eid": embedding_id},
+        )
+        items = resp.get("Items", [])
+        if not items:
+            continue
+
+        for item in items:
+            s3_uri_bounding_box = item["s3_uri_bounding_box"]
+            table.update_item(
+                Key={
+                    "shard": shard,
+                    "s3_uri_bounding_box": s3_uri_bounding_box,
+                },
+                UpdateExpression="REMOVE embedding_id",
+            )
+            logger.info(f"Removed embedding_id from row: shard={shard}, s3_uri_bounding_box={s3_uri_bounding_box}")
