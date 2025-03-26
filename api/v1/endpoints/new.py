@@ -37,7 +37,7 @@ async def add_new_data(
     original_s3_uri: Optional[str] = Form(None),
     s3_file_path: Optional[str] = Form(None),
     coordinates: Optional[Union[List[float], str]] = Form(None),
-    pick_point: Union[List[float], str] = Form(...),
+    pick_point: str = Form(...),
     comment: Optional[str] = Form(None),
     labeler_name: Optional[str] = Form(None),
     modifier: Optional[str] = Form(None),
@@ -53,11 +53,6 @@ async def add_new_data(
             status_code=400,
             detail="Either 'image' file or 'presigned_url' must be provided."
         )
-
-    logger.info(
-        f"Received POST request with pick point ={pick_point}"
-    )
-    logger.info("Starting new data entry processing...")
     try:
         if image:
             logger.info("Reading image from UploadFile input...")
@@ -106,29 +101,15 @@ async def add_new_data(
                     status_code=400,
                     detail="Coordinates must be a list of floats or a comma-separated string.",
                 )
-
-        if isinstance(pick_point, str):
-            try:
-                pick_point = [float(x.strip()) for x in pick_point.split(",")]
-            except ValueError:
-                logger.error(f"Invalid coordinate format: {pick_point}")
-                raise HTTPException(
-                    status_code=400,
-                    detail="Pick point must be a list of floats or a comma-separated string.",
-                )
+            
+        parsed_pick_points = parse_pick_points_from_string(pick_point)
+        formatted_pick_points = format_pick_points(parsed_pick_points)
 
         if not coordinates or len(coordinates) != 4:
             logger.error(f"Invalid coordinates: {coordinates}")
             raise HTTPException(
                 status_code=400,
                 detail="Coordinates must be an array or string of 4 float values.",
-            )
-
-        if not pick_point or len(pick_point) != 2:
-            logger.error(f"Invalid pick point: {pick_point}")
-            raise HTTPException(
-                status_code=400,
-                detail="Pick point must be an array or string of 4 float values.",
             )
 
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -168,7 +149,7 @@ async def add_new_data(
             "comment": comment,
             "labeler_name": labeler_name,
             "modifier": modifier,
-            "pick_point": pick_point,
+            "pick_point": formatted_pick_points,
         }
         metadata = {
             key: (value if value is not None else "") for key, value in metadata.items()
@@ -359,8 +340,12 @@ def save_to_pinecone(embeddings, metadata):
         if not embedding_id:
             raise ValueError("Embedding ID is missing in metadata.")
 
-        metadata["coordinates"] = ",".join(map(str, metadata["coordinates"]))
-        metadata["pick_point"] = ",".join(map(str, metadata["pick_point"]))
+        if isinstance(metadata["coordinates"], list):
+            metadata["coordinates"] = ",".join(map(str, metadata["coordinates"]))
+        if isinstance(metadata["pick_point"], list):
+            metadata["pick_point"] = ";".join(
+                f"{p[0]},{p[1]}" for p in metadata["pick_point"]
+            )
 
         vector = [
             {
@@ -464,3 +449,45 @@ def append_metadata_to_s3(metadata: dict) -> None:
         raise HTTPException(
             status_code=500, detail=f"Error updating CSV in S3: {str(e)}"
         )
+
+
+def parse_pick_points_from_string(pick_point_str: str) -> List[List[float]]:
+    """
+    Parse a pick point string that may contain one or multiple points.
+    Expected formats:
+      - "x,y" for a single pick point
+      - "x1,y1;x2,y2;..." for multiple pick points
+    Returns a list of [x, y] pairs.
+    """
+    if not pick_point_str:
+        raise HTTPException(status_code=400, detail="pick_point is required.")
+    
+    points = pick_point_str.strip().split(";")
+    parsed_points = []
+    for point in points:
+        coords = point.strip().split(",")
+        if len(coords) != 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Each pick point must contain exactly two comma-separated numbers."
+            )
+        try:
+            x = float(coords[0].strip())
+            y = float(coords[1].strip())
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Pick point coordinates must be valid floats."
+            )
+        parsed_points.append([x, y])
+    return parsed_points
+
+
+def format_pick_points(parsed_points: List[List[float]]) -> str:
+    """
+    Format the list of pick points into a string.
+    Returns:
+      - "x,y" if only one point exists.
+      - "x1,y1;x2,y2;..." if multiple points exist.
+    """
+    return ";".join(f"{pt[0]},{pt[1]}" for pt in parsed_points)

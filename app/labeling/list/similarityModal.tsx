@@ -1,60 +1,125 @@
 "use client";
 
 import React, { useState } from "react";
+import axios from "axios";
 import MetadataForm from "./metadataForm";
 
+const API_URL = (() => {
+  switch (process.env.NEXT_PUBLIC_VERCEL_ENV) {
+    case "development":
+      return process.env.NEXT_PUBLIC_DEVELOPMENT_URL || "http://localhost:8000";
+    case "production":
+      return (
+        process.env.NEXT_PUBLIC_PRODUCTION_URL ||
+        "http://ec2-44-243-22-197.us-west-2.compute.amazonaws.com:8000"
+      );
+    default:
+      return "http://localhost:8000";
+  }
+})();
+
 export interface CropItem {
-    original_s3_uri: string;
-    bounding_box: string;
-    labeled: boolean;
-    labeler_name: string;
-    difficult: boolean;
+  original_s3_uri: string;
+  bounding_box: string;
+  labeled: boolean;
+  labeler_name: string;
+  difficult: boolean;
 }
-  
+
 export interface SimilarityResult {
-    crop_s3_uri: string;
-    crop_presigned_url: string;
-    incoming_crop_metadata: Record<string, any>;
-    similar_crop_s3_uri: string;
-    similar_crop_presigned_url: string | null;
-    similar_crop_metadata: Record<string, any>;
-    score: number | null;
-    embedding_id: string | null;
+  crop_s3_uri: string;
+  crop_presigned_url: string;
+  incoming_crop_metadata: Record<string, any>;
+  similar_crop_s3_uri: string;
+  similar_crop_presigned_url: string | null;
+  similar_crop_metadata: Record<string, any>;
+  score: number | null;
+  embedding_id: string | null;
 }
 
 interface SimilarityModalProps {
   showModal: boolean;
   similarityData: SimilarityResult | null;
 
-  // We need to know if the Dynamo DB had incoming data.
   dynamoDBHadIncoming: boolean;
-
-  // These are fields for labeler's name, difficult
   labelerName: string;
   setLabelerName: (val: string) => void;
   difficult: boolean;
   setDifficult: (val: boolean) => void;
 
-  // Parent callbacks
   onClose: () => void;
   onAddToUDO: () => void;
   onNext: () => void;
   onFinish: () => void;
-
-  // Let parent maintain the main "similarityData" object
   onUpdateSimilarityData: (updated: SimilarityResult) => void;
 }
 
-// We'll define a type for your crosshair style
+function parsePickPoints(pickPointStr?: string): [number, number][] {
+  if (!pickPointStr?.trim()) return [];
+  return pickPointStr
+    .split(";")
+    .map((s) => s.trim())
+    .map((pair) => {
+      const [xStr, yStr] = pair.split(",");
+      const x = parseFloat(xStr);
+      const y = parseFloat(yStr);
+      return [x, y] as [number, number];
+    })
+    .filter(([x, y]) => !isNaN(x) && !isNaN(y));
+}
+
+function formatPickPoints(points: [number, number][]): string {
+  return points
+    .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`)
+    .join(";");
+}
+
 const crossArmStyle: React.CSSProperties = {
   position: "absolute",
   background: "red",
 };
 
-/**
- * A dedicated modal that shows "Incoming Crop" and "Similar Crop" side by side,
- * plus the labeler name, difficult checkbox, etc.
- */
+function MultipleCrosshairs({ pickPointStr }: { pickPointStr?: string }) {
+  const points = parsePickPoints(pickPointStr);
+  return (
+    <>
+      {points.map(([px, py], i) => {
+        const style: React.CSSProperties = {
+          position: "absolute",
+          left: `${(px * 100).toFixed(1)}%`,
+          top: `${(py * 100).toFixed(1)}%`,
+          width: 0,
+          height: 0,
+          pointerEvents: "none",
+          transform: "translate(-50%, -50%)",
+        };
+        return (
+          <div key={i} style={style}>
+            <div
+              style={{
+                ...crossArmStyle,
+                width: "1px",
+                height: "14px",
+                top: "-7px",
+                left: "0px",
+              }}
+            />
+            <div
+              style={{
+                ...crossArmStyle,
+                width: "14px",
+                height: "1px",
+                top: "0px",
+                left: "-7px",
+              }}
+            />
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 export default function SimilarityModal({
   showModal,
   similarityData,
@@ -69,22 +134,119 @@ export default function SimilarityModal({
   onFinish,
   onUpdateSimilarityData,
 }: SimilarityModalProps) {
-  // Manage internal toggles for pick-point overlays
   const [showIncomingOverlay, setShowIncomingOverlay] = useState(false);
   const [showSimilarOverlay, setShowSimilarOverlay] = useState(false);
 
-  // If not visible or no data => render nothing
+  // If not visible or no data => return null
   if (!showModal || !similarityData) {
     return null;
   }
 
-  // Helper: decide which text+color to show for the incoming crop's metadata source
-  function getIncomingSourceTag(): { text: string; color: string } {
-    if (!similarityData) {
-      return { text: "", color: "" };
+  // We'll define 'data' as definitely non-null
+  const data = similarityData;
+
+  // 1) Called when user edits incoming metadata
+  function handleIncomingMetaChange(updated: Record<string, any>) {
+    onUpdateSimilarityData({
+      ...data,
+      incoming_crop_metadata: updated,
+    } as SimilarityResult);
+  }
+
+  // 2) Called when user edits similar metadata
+  function handleSimilarMetaChange(updated: Record<string, any>) {
+    onUpdateSimilarityData({
+      ...data,
+      similar_crop_metadata: updated,
+    } as SimilarityResult);
+  }
+
+  // 3) Add pick point for "Incoming Crop"
+  function handleIncomingImgClick(e: React.MouseEvent<HTMLImageElement>) {
+    if (!showIncomingOverlay) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xFrac = (e.clientX - rect.left) / rect.width;
+    const yFrac = (e.clientY - rect.top) / rect.height;
+
+    const oldStr = data.incoming_crop_metadata.pick_point || "";
+    const oldPoints = parsePickPoints(oldStr);
+    oldPoints.push([xFrac, yFrac]);
+    const newStr = formatPickPoints(oldPoints);
+
+    onUpdateSimilarityData({
+      ...data,
+      incoming_crop_metadata: {
+        ...data.incoming_crop_metadata,
+        pick_point: newStr,
+      },
+    } as SimilarityResult);
+  }
+
+  // 4) Add pick point for "Similar Crop"
+  function handleSimilarImgClick(e: React.MouseEvent<HTMLImageElement>) {
+    if (!showSimilarOverlay) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xFrac = (e.clientX - rect.left) / rect.width;
+    const yFrac = (e.clientY - rect.top) / rect.height;
+
+    const oldStr = data.similar_crop_metadata.pick_point || "";
+    const oldPoints = parsePickPoints(oldStr);
+    oldPoints.push([xFrac, yFrac]);
+    const newStr = formatPickPoints(oldPoints);
+
+    onUpdateSimilarityData({
+      ...data,
+      similar_crop_metadata: {
+        ...data.similar_crop_metadata,
+        pick_point: newStr,
+      },
+    } as SimilarityResult);
+  }
+
+  // 5) Clear all pick points
+  function handleClearPickPoints(isIncoming: boolean) {
+    if (isIncoming) {
+      onUpdateSimilarityData({
+        ...data,
+        incoming_crop_metadata: {
+          ...data.incoming_crop_metadata,
+          pick_point: "",
+        },
+      } as SimilarityResult);
+    } else {
+      onUpdateSimilarityData({
+        ...data,
+        similar_crop_metadata: {
+          ...data.similar_crop_metadata,
+          pick_point: "",
+        },
+      } as SimilarityResult);
     }
-    const { embedding_id, incoming_crop_metadata } = similarityData;
-    if (embedding_id) {
+  }
+
+  // 6) If embedding_id => show "Delete from UDO", else => "Add to UDO"
+  async function handleDeleteFromUDO() {
+    if (!data.embedding_id) return;
+
+    try {
+      await axios.post(`${API_URL}/delete`, {
+        embedding_id: data.embedding_id,
+      });
+
+      alert("Deleted from UDO!");
+      // Clear embedding_id from local so the UI flips back
+      onUpdateSimilarityData({
+        ...data,
+        embedding_id: null,
+      } as SimilarityResult);
+    } catch (err) {
+      console.error("Delete from UDO failed:", err);
+      alert("Failed to delete from UDO. Check console for details.");
+    }
+  }
+
+  function getIncomingSourceTag(): { text: string; color: string } {
+    if (data.embedding_id) {
       return { text: "Metadata from UDO", color: "green" };
     } else if (dynamoDBHadIncoming) {
       return { text: "Metadata from Dynamo DB", color: "orange" };
@@ -92,118 +254,22 @@ export default function SimilarityModal({
       return { text: "Metadata from similar crop", color: "purple" };
     }
   }
-
-  // Called from the MetadataForm for incoming
-  function handleIncomingMetaChange(updated: Record<string, any>) {
-    if (!similarityData) return;
-
-    onUpdateSimilarityData({
-      ...similarityData,
-      crop_s3_uri: similarityData.crop_s3_uri ?? "",
-      crop_presigned_url: similarityData.crop_presigned_url ?? "",
-      similar_crop_s3_uri: similarityData.similar_crop_s3_uri ?? "",
-      similar_crop_presigned_url: similarityData.similar_crop_presigned_url ?? "",
-      similar_crop_metadata: similarityData.similar_crop_metadata ?? {},
-      score: similarityData.score ?? null,
-      embedding_id: similarityData.embedding_id ?? null,
-      incoming_crop_metadata: updated,
-    });
-  }
-
-  // Called from the MetadataForm for similar
-  function handleSimilarMetaChange(updated: Record<string, any>) {
-    if (!similarityData) return;
-
-    onUpdateSimilarityData({
-      ...similarityData,
-      crop_s3_uri: similarityData.crop_s3_uri ?? "",
-      crop_presigned_url: similarityData.crop_presigned_url ?? "",
-      similar_crop_s3_uri: similarityData.similar_crop_s3_uri ?? "",
-      similar_crop_presigned_url: similarityData.similar_crop_presigned_url ?? "",
-      similar_crop_metadata: updated,
-      score: similarityData.score ?? null,
-      embedding_id: similarityData.embedding_id ?? null,
-      incoming_crop_metadata: similarityData.incoming_crop_metadata ?? {},
-    });
-  }
-
-
-    // Handle click on the incoming image => set pick_point
-  function handleIncomingImgClick(e: React.MouseEvent<HTMLImageElement>) {
-    if (!showIncomingOverlay || !similarityData) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const xPos = e.clientX - rect.left;
-    const yPos = e.clientY - rect.top;
-    const xFrac = (xPos / rect.width).toFixed(2);
-    const yFrac = (yPos / rect.height).toFixed(2);
-
-    onUpdateSimilarityData({
-      ...similarityData,
-      crop_s3_uri: similarityData.crop_s3_uri ?? "",
-      crop_presigned_url: similarityData.crop_presigned_url ?? "",
-      similar_crop_s3_uri: similarityData.similar_crop_s3_uri ?? "",
-      similar_crop_presigned_url: similarityData.similar_crop_presigned_url ?? "",
-      similar_crop_metadata: similarityData.similar_crop_metadata ?? {},
-      score: similarityData.score ?? null,
-      embedding_id: similarityData.embedding_id ?? null,
-      incoming_crop_metadata: {
-        ...similarityData.incoming_crop_metadata,
-        pick_point: `${xFrac},${yFrac}`,
-      },
-    });
-  }
-
-
-  // Handle click on the similar image => set pick_point
-  function handleSimilarImgClick(e: React.MouseEvent<HTMLImageElement>) {
-    if (!showSimilarOverlay || !similarityData) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const xPos = e.clientX - rect.left;
-    const yPos = e.clientY - rect.top;
-    const xFrac = (xPos / rect.width).toFixed(2);
-    const yFrac = (yPos / rect.height).toFixed(2);
-
-    onUpdateSimilarityData({
-      ...similarityData,
-      crop_s3_uri: similarityData.crop_s3_uri ?? "",
-      crop_presigned_url: similarityData.crop_presigned_url ?? "",
-      similar_crop_s3_uri: similarityData.similar_crop_s3_uri ?? "",
-      similar_crop_presigned_url: similarityData.similar_crop_presigned_url ?? "",
-      similar_crop_metadata: {
-        ...similarityData.similar_crop_metadata,
-        pick_point: `${xFrac},${yFrac}`,
-      },
-      score: similarityData.score ?? null,
-      embedding_id: similarityData.embedding_id ?? null,
-      incoming_crop_metadata: similarityData.incoming_crop_metadata ?? {},
-    });
-  }
-
-
-  // Crosshair styling
-  function pickPointCrossStyle(pickPoint?: string): React.CSSProperties {
-    if (!pickPoint) return { display: "none" };
-    const [xStr, yStr] = pickPoint.split(",");
-    const x = parseFloat(xStr) || 0;
-    const y = parseFloat(yStr) || 0;
-    return {
-      position: "absolute",
-      left: `${(x * 100).toFixed(1)}%`,
-      top: `${(y * 100).toFixed(1)}%`,
-      width: 0,
-      height: 0,
-      pointerEvents: "none",
-      transform: "translate(-50%, -50%)",
-    };
-  }
-
-  function pickPointButtonLabel(pickPoint?: string) {
-    return pickPoint ? "Reselect Pick Point" : "Select Pick Point";
-  }
-
   const { text: incomingTagText, color: incomingTagColor } = getIncomingSourceTag();
+
+  function getIncomingButtonLabel(): string {
+    if (showIncomingOverlay) {
+      return "Finish selecting";
+    }
+    const arr = parsePickPoints(data.incoming_crop_metadata.pick_point);
+    return arr.length > 0 ? "Re-select pick points" : "Select pick points";
+  }
+  function getSimilarButtonLabel(): string {
+    if (showSimilarOverlay) {
+      return "Finish selecting";
+    }
+    const arr = parsePickPoints(data.similar_crop_metadata.pick_point);
+    return arr.length > 0 ? "Re-select pick points" : "Select pick points";
+  }
 
   return (
     <div
@@ -240,7 +306,6 @@ export default function SimilarityModal({
           Similarity Result
         </h2>
 
-        {/* -- Two columns: Incoming Crop & Similar Crop -- */}
         <div
           style={{
             display: "flex",
@@ -249,7 +314,7 @@ export default function SimilarityModal({
             alignItems: "flex-start",
           }}
         >
-          {/* -------------------- Incoming Crop Column -------------------- */}
+          {/* Incoming Crop */}
           <div
             style={{
               flex: 1,
@@ -286,7 +351,7 @@ export default function SimilarityModal({
               )}
             </h3>
 
-            {similarityData.crop_presigned_url ? (
+            {data.crop_presigned_url ? (
               <>
                 <div
                   style={{
@@ -298,95 +363,97 @@ export default function SimilarityModal({
                   }}
                 >
                   <img
-                    src={similarityData.crop_presigned_url}
+                    src={data.crop_presigned_url}
                     alt="Incoming Crop"
                     style={{
                       display: "block",
                       width: "100%",
                       height: "auto",
-                      margin: 0,
-                      padding: 0,
                       cursor: showIncomingOverlay ? "crosshair" : "default",
                       border: "1px solid #ddd",
                       borderRadius: "4px",
                     }}
                     onClick={handleIncomingImgClick}
                   />
-                  <div
-                    style={pickPointCrossStyle(
-                      similarityData.incoming_crop_metadata.pick_point
-                    )}
-                  >
-                    <div
-                      style={{
-                        ...crossArmStyle,
-                        width: "1px",
-                        height: "14px",
-                        top: "-7px",
-                        left: "0px",
-                      }}
-                    />
-                    <div
-                      style={{
-                        ...crossArmStyle,
-                        width: "14px",
-                        height: "1px",
-                        top: "0px",
-                        left: "-7px",
-                      }}
-                    />
-                  </div>
+                  <MultipleCrosshairs
+                    pickPointStr={data.incoming_crop_metadata.pick_point}
+                  />
                 </div>
 
-                <button
-                  onClick={() => setShowIncomingOverlay((prev) => !prev)}
-                  style={{
-                    marginBottom: "1rem",
-                    padding: "6px 12px",
-                    borderRadius: "4px",
-                    border: "1px solid #bbb",
-                    background: "#e6e6e6",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                  }}
-                >
-                  {pickPointButtonLabel(
-                    similarityData.incoming_crop_metadata.pick_point
-                  )}
-                </button>
+                <div style={{ marginBottom: "1rem" }}>
+                  <button
+                    onClick={() => setShowIncomingOverlay((prev) => !prev)}
+                    style={{
+                      marginRight: "0.5rem",
+                      padding: "6px 12px",
+                      borderRadius: "4px",
+                      border: "1px solid #bbb",
+                      background: "#e6e6e6",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                    }}
+                  >
+                    {getIncomingButtonLabel()}
+                  </button>
+                  <button
+                    onClick={() => handleClearPickPoints(true)}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: "4px",
+                      border: "1px solid #bbb",
+                      background: "#f8d7da",
+                      color: "#721c24",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                    }}
+                  >
+                    Clear All
+                  </button>
+                </div>
               </>
             ) : (
               <p>No incoming crop URL</p>
             )}
 
             <MetadataForm
-              metadata={similarityData.incoming_crop_metadata}
+              metadata={data.incoming_crop_metadata}
               onMetadataChange={handleIncomingMetaChange}
             />
 
-            {/* If there's an embedding_id => we are already in DB => disable */}
             <div style={{ marginTop: "1rem" }}>
-              <button
-                onClick={onAddToUDO}
-                disabled={Boolean(similarityData.embedding_id)}
-                style={{
-                  backgroundColor: "#4caf50",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "4px",
-                  padding: "0.5rem 1rem",
-                  cursor: similarityData.embedding_id
-                    ? "not-allowed"
-                    : "pointer",
-                  opacity: similarityData.embedding_id ? 0.6 : 1,
-                }}
-              >
-                Add to UDO
-              </button>
+              {data.embedding_id ? (
+                <button
+                  onClick={handleDeleteFromUDO}
+                  style={{
+                    backgroundColor: "#d9534f",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    padding: "0.5rem 1rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Delete from UDO
+                </button>
+              ) : (
+                <button
+                  onClick={onAddToUDO}
+                  style={{
+                    backgroundColor: "#4caf50",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    padding: "0.5rem 1rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Add to UDO
+                </button>
+              )}
             </div>
           </div>
 
-          {/* -------------------- Similar Crop Column -------------------- */}
+          {/* Similar Crop */}
           <div
             style={{
               flex: 1,
@@ -407,7 +474,7 @@ export default function SimilarityModal({
               Similar Crop
             </h3>
 
-            {similarityData.similar_crop_presigned_url ? (
+            {data.similar_crop_presigned_url ? (
               <>
                 <div
                   style={{
@@ -419,75 +486,72 @@ export default function SimilarityModal({
                   }}
                 >
                   <img
-                    src={similarityData.similar_crop_presigned_url}
+                    src={data.similar_crop_presigned_url}
                     alt="Similar Crop"
                     style={{
                       display: "block",
                       width: "100%",
                       height: "auto",
-                      margin: 0,
-                      padding: 0,
                       cursor: showSimilarOverlay ? "crosshair" : "default",
                       border: "1px solid #ddd",
                       borderRadius: "4px",
                     }}
                     onClick={handleSimilarImgClick}
                   />
-                  <div
-                    style={pickPointCrossStyle(
-                      similarityData.similar_crop_metadata.pick_point
-                    )}
-                  >
-                    <div
-                      style={{
-                        ...crossArmStyle,
-                        width: "1px",
-                        height: "14px",
-                        top: "-7px",
-                        left: "0px",
-                      }}
-                    />
-                    <div
-                      style={{
-                        ...crossArmStyle,
-                        width: "14px",
-                        height: "1px",
-                        top: "0px",
-                        left: "-7px",
-                      }}
-                    />
-                  </div>
+                  <MultipleCrosshairs
+                    pickPointStr={data.similar_crop_metadata.pick_point}
+                  />
                 </div>
 
-                <button
-                  onClick={() => setShowSimilarOverlay((prev) => !prev)}
-                  style={{
-                    marginBottom: "1rem",
-                    padding: "6px 12px",
-                    borderRadius: "4px",
-                    border: "1px solid #bbb",
-                    background: "#e6e6e6",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                  }}
-                >
-                  {pickPointButtonLabel(
-                    similarityData.similar_crop_metadata.pick_point
-                  )}
-                </button>
+                <div style={{ marginBottom: "1rem" }}>
+                  <button
+                    onClick={() => setShowSimilarOverlay((prev) => !prev)}
+                    style={{
+                      marginRight: "0.5rem",
+                      padding: "6px 12px",
+                      borderRadius: "4px",
+                      border: "1px solid #bbb",
+                      background: "#e6e6e6",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                    }}
+                  >
+                    {showSimilarOverlay
+                      ? "Finish selecting"
+                      : parsePickPoints(data.similar_crop_metadata.pick_point)
+                          .length > 0
+                      ? "Re-select pick points"
+                      : "Select pick points"}
+                  </button>
+
+                  <button
+                    onClick={() => handleClearPickPoints(false)}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: "4px",
+                      border: "1px solid #bbb",
+                      background: "#f8d7da",
+                      color: "#721c24",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                    }}
+                  >
+                    Clear All
+                  </button>
+                </div>
               </>
             ) : (
               <p>No similar crop URL</p>
             )}
 
             <MetadataForm
-              metadata={similarityData.similar_crop_metadata}
+              metadata={data.similar_crop_metadata}
               onMetadataChange={handleSimilarMetaChange}
             />
           </div>
         </div>
 
-        {/* ------- Center fields (Labeler name, difficult) ------- */}
+        {/* Labeler / Difficult */}
         <div style={{ textAlign: "center", margin: "1.5rem 0" }}>
           <div style={{ marginBottom: "8px" }}>
             <label style={{ marginRight: "6px", fontWeight: "bold" }}>
@@ -517,7 +581,7 @@ export default function SimilarityModal({
           </div>
         </div>
 
-        {/* ------- Bottom Buttons (Close, Finish, Next) ------- */}
+        {/* Bottom Buttons */}
         <div
           style={{
             display: "flex",

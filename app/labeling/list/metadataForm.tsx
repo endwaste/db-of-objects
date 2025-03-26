@@ -15,13 +15,15 @@ interface MetadataFormProps {
 
 /**
  * Renders brand/color/material/shape/modifier fields, plus a pick_point read-only.
- * If brand is "Other" or not recognized, we show a custom brand input.
+ * We keep "No brand" as value: "", but also let the user pick "Other (Specify Below)" -> "Other".
+ * If brand is "Other" or is an unrecognized string, we show a custom brand text input
+ * that remains visible even if user clears the text (unless they select "No brand" from the list).
  */
 export default function MetadataForm({
   metadata,
   onMetadataChange,
 }: MetadataFormProps) {
-  const [localMeta, setLocalMeta] = useState<Record<string, any>>(metadata);
+  const [localMeta, setLocalMeta] = useState<Record<string, any>>({});
   const [isCustomBrand, setIsCustomBrand] = useState(false);
 
   // For the modifier dropdown
@@ -29,23 +31,29 @@ export default function MetadataForm({
   const modifierDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // 1) sync local state with the incoming 'metadata'
     setLocalMeta(metadata);
 
-    // Decide if brand is "Other" or unrecognized
-    if (!metadata.brand) {
-      setIsCustomBrand(false);
+    // 2) decide if brand is recognized or custom
+    const brandVal = metadata.brand ?? "";
+    // brandOptions has: { value: "", label: "No brand" }, etc.
+    // We find if brandVal is in the list
+    const isInList = brandOptions.some((b) => b.value === brandVal);
+
+    if (brandVal === "Other") {
+      // user specifically has "Other" => show custom box
+      setIsCustomBrand(true);
+    } else if (!isInList && brandVal !== "") {
+      // brand is not recognized, and it's not empty => custom typed brand => show box
+      setIsCustomBrand(true);
     } else {
-      const knownOption = brandOptions.find((b) => b.value === metadata.brand);
-      if (!knownOption || knownOption.value === "Other") {
-        setIsCustomBrand(true);
-      } else {
-        setIsCustomBrand(false);
-      }
+      // recognized brand or empty => no custom brand
+      setIsCustomBrand(false);
     }
   }, [metadata]);
 
-  // Close modifier dropdown if user clicks outside
   useEffect(() => {
+    // close modifiers on outside click
     function handleClickOutside(e: MouseEvent) {
       if (
         modifierDropdownRef.current &&
@@ -58,28 +66,35 @@ export default function MetadataForm({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  /** Helper to update local + notify parent */
   function handleFieldChange(field: string, value: string) {
     const updated = { ...localMeta, [field]: value };
     setLocalMeta(updated);
     onMetadataChange(updated);
   }
 
-  function handleBrandChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  /** When user picks from the brand <select> */
+  function handleBrandSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const val = e.target.value;
     if (val === "Other") {
+      // user wants to pick "Other"
       setIsCustomBrand(true);
+      // keep brand as "Other" so the dropdown remains at "Other"
       handleFieldChange("brand", "Other");
     } else {
+      // recognized brand or empty => no custom brand
       setIsCustomBrand(false);
       handleFieldChange("brand", val);
     }
   }
 
+  /** For the user to type a custom brand */
   function handleCustomBrandChange(e: React.ChangeEvent<HTMLInputElement>) {
-    handleFieldChange("brand", e.target.value);
+    const typed = e.target.value;
+    handleFieldChange("brand", typed);
   }
 
-  // Multi-check modifiers
+  /** multi-check modifiers */
   function handleModifierChange(modVal: string, checked: boolean) {
     const curr = localMeta.modifier || "";
     const arr = curr ? curr.split(", ") : [];
@@ -99,16 +114,32 @@ export default function MetadataForm({
       {/* Brand */}
       <div style={{ marginBottom: "8px" }}>
         <label style={{ marginRight: 6, fontWeight: "bold" }}>Brand:</label>
+
         <select
-          value={isCustomBrand ? "Other" : localMeta.brand || ""}
-          onChange={handleBrandChange}
+          // if brand is "Other" or an unrecognized custom string => show "Other" in the dropdown
+          // but we only literally pick "Other" if brandVal is exactly "Other"
+          value={
+            // if the brand is "Other" => user selected "Other"
+            // if brand is recognized => that brand
+            // if brand is unrecognized + not empty => keep "Other"
+            localMeta.brand === "Other"
+              ? "Other"
+              : brandOptions.some((b) => b.value === localMeta.brand)
+              ? // recognized brand
+                localMeta.brand
+              : // brand is unrecognized or empty => treat as empty or "no brand"
+                localMeta.brand === ""
+              ? ""
+              : // unrecognized => "Other"
+                "Other"
+          }
+          onChange={handleBrandSelect}
           style={{
             padding: "4px 6px",
             borderRadius: "4px",
             border: "1px solid #ccc",
           }}
         >
-          <option value="">--Select--</option>
           {brandOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
@@ -126,7 +157,11 @@ export default function MetadataForm({
               borderRadius: "4px",
               border: "1px solid #ccc",
             }}
-            value={localMeta.brand}
+            // if brand is literally "Other", we show an empty text field or user typed text
+            // if brand is typed => localMeta.brand
+            value={
+              localMeta.brand === "Other" ? "" : (localMeta.brand || "")
+            }
             onChange={handleCustomBrandChange}
           />
         )}

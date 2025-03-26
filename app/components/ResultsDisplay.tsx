@@ -89,23 +89,19 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
     setSelectedCoordinates(null);
   };
 
-  // Helper function to parse pick_point into numeric [x, y]
-  function parsePickPoint(pickPoint: string | string[] | undefined): [number, number] | null {
-    if (!pickPoint) return null;
-    if (typeof pickPoint === "string") {
-      const [xStr, yStr] = pickPoint.split(",");
-      const px = parseFloat(xStr.trim());
-      const py = parseFloat(yStr.trim());
-      if (!isNaN(px) && !isNaN(py)) return [px, py];
-      return null;
-    }
-    if (Array.isArray(pickPoint) && pickPoint.length === 2) {
-      const px = parseFloat(pickPoint[0]);
-      const py = parseFloat(pickPoint[1]);
-      if (!isNaN(px) && !isNaN(py)) return [px, py];
-      return null;
-    }
-    return null;
+  // -- NEW HELPER: parse multiple pick points, e.g. "0.4,0.3;0.8,0.6"
+  function parsePickPoints(pickPointStr: string | undefined): [number, number][] {
+    if (!pickPointStr) return [];
+    return pickPointStr
+      .split(";")
+      .map((pair) => pair.trim())
+      .map((pair) => {
+        const [xStr, yStr] = pair.split(",");
+        const px = parseFloat(xStr);
+        const py = parseFloat(yStr);
+        return [px, py] as [number, number];
+      })
+      .filter(([px, py]) => !isNaN(px) && !isNaN(py));
   }
 
   return (
@@ -165,10 +161,8 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                   ].includes(key) && value
               );
 
-              // We'll parse the pick_point once:
-              const pickPoint = parsePickPoint(result.metadata.pick_point);
-              const px = pickPoint ? pickPoint[0] : null;
-              const py = pickPoint ? pickPoint[1] : null;
+              // Parse multiple pick points
+              const pickPoints = parsePickPoints(result.metadata.pick_point);
 
               // Each card rendering:
               return (
@@ -186,14 +180,13 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                     </button>
                   </div>
 
-                  {/* Display Image & Score & Red Cross (with letterboxing logic) */}
+                  {/* Display Image & Score & Red crosses */}
                   <div className="bg-white rounded-md shadow-md overflow-hidden flex flex-col">
                     <div className="mt-3 mr-3 ml-3">
                       <ImageContainer
                         imageUrl={result.metadata.s3_presigned_url}
                         score={roundedScore}
-                        px={px}
-                        py={py}
+                        pickPoints={pickPoints}
                         wholeImageUrl={result.metadata.whole_image_presigned_url}
                         coordinates={result.metadata.coordinates}
                         onViewWholeImage={() =>
@@ -263,13 +256,12 @@ export default ResultsDisplay;
 /**
  * A separate component to handle the forced 4:3 box,
  * the `object-contain` letterboxing,
- * and placing the red cross using normalized pick_point.
+ * and placing the red cross for each pick point.
  */
 interface ImageContainerProps {
   imageUrl: string;
   score: string;
-  px: number | null;
-  py: number | null;
+  pickPoints: [number, number][]; // multiple pick points
   wholeImageUrl?: string;
   coordinates?: string;
   onViewWholeImage: () => void;
@@ -278,8 +270,7 @@ interface ImageContainerProps {
 const ImageContainer: React.FC<ImageContainerProps> = ({
   imageUrl,
   score,
-  px,
-  py,
+  pickPoints,
   wholeImageUrl,
   coordinates,
   onViewWholeImage,
@@ -304,23 +295,17 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     }));
   }, [imageLoaded]);
 
-  // Calculate where the cross should go, accounting for letterboxing.
-  let crossLeft = 0;
-  let crossTop = 0;
-  const { containerWidth, containerHeight, imgWidth, imgHeight } = dims;
+  // We'll compute letterboxing info once
+  // then for each pick point we apply the same offsets
+  let renderedWidth = 0;
+  let renderedHeight = 0;
+  let offsetX = 0;
+  let offsetY = 0;
 
-  if (
-    imgWidth > 0 &&
-    imgHeight > 0 &&
-    containerWidth > 0 &&
-    containerHeight > 0 &&
-    px !== null &&
-    py !== null
-  ) {
+  const { containerWidth, containerHeight, imgWidth, imgHeight } = dims;
+  if (imgWidth > 0 && imgHeight > 0 && containerWidth > 0 && containerHeight > 0) {
     const containerAspect = containerWidth / containerHeight;
     const imageAspect = imgWidth / imgHeight;
-    let renderedWidth = 0;
-    let renderedHeight = 0;
 
     if (imageAspect > containerAspect) {
       // image is "wider" => fill container width
@@ -331,12 +316,8 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
       renderedHeight = containerHeight;
       renderedWidth = (containerHeight / imgHeight) * imgWidth;
     }
-    // The leftover space on the sides or top/bottom is letterboxed
-    const offsetX = (containerWidth - renderedWidth) / 2;
-    const offsetY = (containerHeight - renderedHeight) / 2;
-
-    crossLeft = offsetX + px * renderedWidth;
-    crossTop = offsetY + py * renderedHeight;
+    offsetX = (containerWidth - renderedWidth) / 2;
+    offsetY = (containerHeight - renderedHeight) / 2;
   }
 
   return (
@@ -369,21 +350,27 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
         {score}
       </div>
 
-      {/* Red cross if pick point is valid */}
-      {px !== null && py !== null && !isNaN(px) && !isNaN(py) && (
-        <div
-          className="absolute text-red-600 font-bold select-none"
-          style={{
-            left: crossLeft,
-            top: crossTop,
-            transform: "translate(-50%, -50%)",
-            pointerEvents: "none",
-            fontSize: "1.25rem",
-          }}
-        >
-          +
-        </div>
-      )}
+      {/* Place a red cross for each pick point */}
+      {pickPoints.map(([px, py], i) => {
+        if (isNaN(px) || isNaN(py)) return null;
+        const crossLeft = offsetX + px * renderedWidth;
+        const crossTop = offsetY + py * renderedHeight;
+        return (
+          <div
+            key={i}
+            className="absolute text-red-600 font-bold select-none"
+            style={{
+              left: crossLeft,
+              top: crossTop,
+              transform: "translate(-50%, -50%)",
+              pointerEvents: "none",
+              fontSize: "1.25rem",
+            }}
+          >
+            +
+          </div>
+        );
+      })}
 
       {wholeImageUrl && (
         <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">

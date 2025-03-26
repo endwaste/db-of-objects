@@ -1,16 +1,15 @@
 from fastapi import APIRouter, HTTPException, Form
-from typing import Optional
-from api.config import settings
+from typing import Optional, Union, List
 import logging
 import tempfile
 import csv
-from typing import Union
+
+from api.config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 router = APIRouter()
 index = settings.get_pinecone_index()
-
 
 @router.put("/update/{embedding_id}")
 async def update_metadata(
@@ -24,14 +23,20 @@ async def update_metadata(
     labeler_name: Union[str, None] = Form(""),
     pick_point: Union[str, None] = Form(""),
 ):
-    """Update metadata for an existing entry in Pinecone and the CSV in S3."""
-
+    """
+    Update metadata for an existing entry in Pinecone and the CSV in S3,
+    including multiple pick points of the form "x1,y1;x2,y2".
+    """
     try:
-        current_metadata, current_vector = await fetch_metadata_from_pinecone(
-            embedding_id
-        )
+        current_metadata, current_vector = await fetch_metadata_from_pinecone(embedding_id)
         if not current_metadata:
             raise HTTPException(status_code=404, detail="Metadata not found.")
+
+        if pick_point:
+            parsed_points = parse_pick_points_from_string(pick_point)
+            formatted_points = format_pick_points(parsed_points)
+        else:
+            formatted_points = current_metadata.get("pick_point", "")
 
         updated_metadata = {
             "color": color,
@@ -49,7 +54,7 @@ async def update_metadata(
             "datetime_taken": current_metadata["datetime_taken"],
             "file_type": current_metadata["file_type"],
             "embedding_id": embedding_id,
-            "pick_point": pick_point,
+            "pick_point": formatted_points,
         }
 
         await update_pinecone(embedding_id, updated_metadata, current_vector)
@@ -75,7 +80,6 @@ async def fetch_metadata_from_pinecone(embedding_id: str) -> dict:
     """Fetch metadata from Pinecone using the embedding ID."""
     try:
         current_metadata_response = index.fetch([embedding_id])
-
         vectors = current_metadata_response.get("vectors", {})
         if embedding_id not in vectors:
             raise HTTPException(status_code=404, detail="Metadata not found.")
@@ -103,9 +107,7 @@ async def update_pinecone(
                 "metadata": updated_metadata,
             }
         ]
-
         index.upsert(vector)
-
     except Exception as e:
         logger.error(f"Error updating Pinecone: {str(e)}")
         raise HTTPException(
@@ -135,54 +137,30 @@ async def update_csv_in_s3(updated_metadata: dict):
                 with open(temp_file_name, mode="r", newline="") as f:
                     reader = csv.DictReader(f)
                     if "id" not in reader.fieldnames:
-                        raise ValueError(
-                            "CSV file is missing the 'id' column in headers."
-                        )
+                        raise ValueError("CSV file is missing the 'id' column in headers.")
 
                     for row in reader:
                         if row.get("id") == updated_metadata["embedding_id"]:
-                            logger.info(
-                                f"Updating row with ID: {updated_metadata['embedding_id']}"
-                            )
-                            row["color"] = updated_metadata.get(
-                                "color", row.get("color", "")
-                            )
-                            row["material"] = updated_metadata.get(
-                                "material", row.get("material", "")
-                            )
-                            row["brand"] = updated_metadata.get(
-                                "brand", row.get("brand", "")
-                            )
-                            row["shape"] = updated_metadata.get(
-                                "shape", row.get("shape", "")
-                            )
-                            row["comment"] = updated_metadata.get(
-                                "comment", row.get("comment", "")
-                            )
-                            row["modifier"] = updated_metadata.get(
-                                "modifier", row.get("modifier", "")
-                            )
-                            row["status"] = updated_metadata.get(
-                                "status", row.get("status", "")
-                            )
-                            row["pick_point"] = updated_metadata.get(
-                                "pick_point", row.get("pick_point", "")
-                            )
+                            # Update these fields
+                            row["color"] = updated_metadata.get("color", row.get("color", ""))
+                            row["material"] = updated_metadata.get("material", row.get("material", ""))
+                            row["brand"] = updated_metadata.get("brand", row.get("brand", ""))
+                            row["shape"] = updated_metadata.get("shape", row.get("shape", ""))
+                            row["comment"] = updated_metadata.get("comment", row.get("comment", ""))
+                            row["modifier"] = updated_metadata.get("modifier", row.get("modifier", ""))
+                            row["status"] = updated_metadata.get("status", row.get("status", ""))
+                            row["pick_point"] = updated_metadata.get("pick_point", row.get("pick_point", ""))
                         updated_rows.append(row)
 
                 with open(temp_file_name, mode="w", newline="") as f:
                     fieldnames = (
-                        reader.fieldnames
-                        if reader.fieldnames
-                        else updated_metadata.keys()
+                        reader.fieldnames if reader.fieldnames else updated_metadata.keys()
                     )
                     writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writeheader()
                     writer.writerows(updated_rows)
 
-                logger.info(
-                    f"Uploading updated CSV back to S3: bucket={bucket_name}, key={csv_key}"
-                )
+                logger.info(f"Uploading updated CSV back to S3: bucket={bucket_name}, key={csv_key}")
                 s3_client.upload_file(temp_file_name, bucket_name, csv_key)
                 logger.info("Updated CSV uploaded to S3 successfully.")
             else:
@@ -191,9 +169,46 @@ async def update_csv_in_s3(updated_metadata: dict):
     except ValueError as ve:
         logger.error(f"ValueError: {str(ve)}")
         raise HTTPException(status_code=400, detail=f"ValueError: {str(ve)}")
-
     except Exception as e:
         logger.error(f"Error updating CSV in S3: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error updating CSV in S3: {str(e)}"
         )
+
+
+# -----------------------------
+#  Helpers for pick_point
+# -----------------------------
+def parse_pick_points_from_string(pick_point_str: str) -> List[List[float]]:
+    """
+    Parse a pick point string that may contain one or multiple points.
+    Format: "x1,y1;x2,y2;...".
+    Returns a list of [x, y] pairs.
+    Raises 400 if invalid.
+    """
+    points = pick_point_str.strip().split(";")
+    parsed_points = []
+    for point in points:
+        coords = point.strip().split(",")
+        if len(coords) != 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Each pick point must contain exactly two comma-separated numbers."
+            )
+        try:
+            x = float(coords[0].strip())
+            y = float(coords[1].strip())
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Pick point coordinates must be valid floats."
+            )
+        parsed_points.append([x, y])
+    return parsed_points
+
+
+def format_pick_points(parsed_points: List[List[float]]) -> str:
+    """
+    Format the list of pick points back into "x1,y1;x2,y2;...".
+    """
+    return ";".join(f"{pt[0]},{pt[1]}" for pt in parsed_points)
