@@ -21,7 +21,6 @@ function getRobotFromS3Uri(s3Uri: string): string {
   return "UNKNOWN";
 }
 
-// Helper to parse robot name from original_s3_uri
 function getFolderForItem(item: CropItem): string {
   if (item.dest_folder) {
     return item.dest_folder;
@@ -29,7 +28,6 @@ function getFolderForItem(item: CropItem): string {
   return getRobotFromS3Uri(item.original_s3_uri);
 }
 
-// Adjust to your environment logic
 const BASE_API = (() => {
   switch (process.env.NEXT_PUBLIC_VERCEL_ENV) {
     case "development":
@@ -61,23 +59,22 @@ interface SimilarityResult {
   similar_crop_presigned_url: string | null;
   similar_crop_metadata: Record<string, any>;
   score: number | null;
-  embedding_id: string | null; // if empty => not in DB
+  embedding_id: string | null;
 }
 
 export default function CropListPage() {
-  // 1) Data structures for robot grouping
+  // -----------------------------
+  // State
+  // -----------------------------
   const [robotMap, setRobotMap] = useState<Record<string, CropItem[]>>({});
   const [robots, setRobots] = useState<string[]>([]);
 
-  // 2) Which robot is selected, plus that robot's items
   const [selectedRobot, setSelectedRobot] = useState<string | null>(null);
   const [selectedRobotCrops, setSelectedRobotCrops] = useState<CropItem[]>([]);
 
-  // 3) Error/loading
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 4) Fields for the modal
   const [labelerName, setLabelerName] = useState("");
   const [difficult, setDifficult] = useState(false);
   const [dynamoDBHadIncoming, setDynamoDBHadIncoming] = useState(false);
@@ -87,16 +84,32 @@ export default function CropListPage() {
   );
   const [showModal, setShowModal] = useState(false);
 
-  // 5) Track which row is selected
   const [selectedOriginalS3Uri, setSelectedOriginalS3Uri] = useState("");
   const [selectedBoundingBox, setSelectedBoundingBox] = useState<number[]>([]);
 
-  // 6) Originals for metadata changes
   const [originalSimilar, setOriginalSimilar] = useState<any>(null);
   const [originalIncoming, setOriginalIncoming] = useState<any>(null);
 
+  // Multi-select
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
+  // -----------------------------
+  // Toast for ephemeral messages
+  // -----------------------------
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastVisible, setToastVisible] = useState(false);
+
+  function showToast(message: string, duration = 3000) {
+    setToastMessage(message);
+    setToastVisible(true);
+    setTimeout(() => {
+      setToastVisible(false);
+      setToastMessage("");
+    }, duration);
+  }
+
   // --------------------------------------------------------------------------
-  // Fetch labeling list once on mount
+  // Fetch labeling list
   // --------------------------------------------------------------------------
   useEffect(() => {
     (async () => {
@@ -104,9 +117,7 @@ export default function CropListPage() {
         setLoading(true);
         const res = await axios.get(`${BASE_API}/api/list`);
         const fetchedCrops: CropItem[] = res.data.crops;
-        console.log("Fetched Crops:", fetchedCrops);
 
-        // Group by robot
         const tempRobotMap: Record<string, CropItem[]> = {};
         for (const crop of fetchedCrops) {
           const robot = getFolderForItem(crop);
@@ -115,15 +126,12 @@ export default function CropListPage() {
           }
           tempRobotMap[robot].push(crop);
         }
-
-        // Sort the robot names
         const sortedRobots = Object.keys(tempRobotMap).sort();
-
         setRobotMap(tempRobotMap);
         setRobots(sortedRobots);
       } catch (err) {
         console.error("Error fetching crops:", err);
-        setError("Failed to fetch crop list.");
+        setError("Unable to load the crop list from the server.");
       } finally {
         setLoading(false);
       }
@@ -131,46 +139,39 @@ export default function CropListPage() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // Show that robot's table
+  // Robot selection
   // --------------------------------------------------------------------------
   function handleSelectRobot(robot: string) {
     setSelectedRobot(robot);
     const list = robotMap[robot] || [];
     setSelectedRobotCrops(list);
+    setSelectedItems(new Set());
   }
 
-  // --------------------------------------------------------------------------
-  // "Back" => show folder icons again
-  // --------------------------------------------------------------------------
   function handleBackToFolders() {
     setSelectedRobot(null);
     setSelectedRobotCrops([]);
+    setSelectedItems(new Set());
   }
 
   // --------------------------------------------------------------------------
-  // Handle row click => get similarity => open modal
+  // Similarity
   // --------------------------------------------------------------------------
   async function handleCropClick(crop: CropItem) {
     setSelectedOriginalS3Uri(crop.original_s3_uri);
     setSelectedBoundingBox(crop.bounding_box);
-    try {
-      // populate labeler/difficult from row
-      setLabelerName(crop.labeler_name || "");
-      setDifficult(crop.difficult || false);
+    setDifficult(crop.difficult || false);
 
+    try {
       const payload = {
         original_s3_uri: crop.original_s3_uri,
         bounding_box: crop.bounding_box,
       };
-
       const resp = await axios.post(`${BASE_API}/api/similarity`, payload);
       const result: SimilarityResult = resp.data;
-      console.log("Similarity result:", result);
 
       let incoming = { ...result.incoming_crop_metadata };
       const dynamoDBHadData = incoming && Object.keys(incoming).length > 0;
-
-      // If empty => copy from the similar crops metadata (minus pick_point)
       if (!dynamoDBHadData) {
         incoming = { ...result.similar_crop_metadata };
         delete incoming.pick_point;
@@ -178,13 +179,9 @@ export default function CropListPage() {
         setDynamoDBHadIncoming(true);
       }
 
-      // Save “original” states for detection of changes
       setOriginalIncoming(JSON.parse(JSON.stringify(incoming)));
-      setOriginalSimilar(
-        JSON.parse(JSON.stringify(result.similar_crop_metadata))
-      );
+      setOriginalSimilar(JSON.parse(JSON.stringify(result.similar_crop_metadata)));
 
-      // Set final similarityData w updated incoming
       setSimilarityData({
         ...result,
         incoming_crop_metadata: incoming,
@@ -192,13 +189,10 @@ export default function CropListPage() {
       setShowModal(true);
     } catch (err) {
       console.error("Error calling /similarity:", err);
-      alert("Error calling /similarity. Check console.");
+      showToast("Couldn't load the similarity data. Check console for details.");
     }
   }
 
-  // --------------------------------------------------------------------------
-  // Close the modal
-  // --------------------------------------------------------------------------
   function handleCloseModal() {
     setShowModal(false);
     setSimilarityData(null);
@@ -206,27 +200,26 @@ export default function CropListPage() {
   }
 
   // --------------------------------------------------------------------------
-  // "Add to UDO" logic
+  // Add to UDO
   // --------------------------------------------------------------------------
   async function handleAddToUDO() {
     if (!similarityData) {
-      alert("No data to add to UDO");
+      showToast("No data to add to UDO.");
       return;
     }
     const inc = similarityData.incoming_crop_metadata;
     const presignedUrl = similarityData.crop_presigned_url;
 
     if (!presignedUrl) {
-      alert("No presigned URL found for the incoming crop.");
+      showToast("No presigned URL was found for this crop.");
       return;
     }
     if (!inc.pick_point) {
-      alert("No pick_point found for the incoming crop.");
+      showToast("No pick point found for the incoming crop.");
       return;
     }
 
     try {
-      // Build FormData for /api/new
       const formData = new FormData();
       formData.append("presigned_url", presignedUrl);
       formData.append("brand", inc.brand || "");
@@ -243,90 +236,47 @@ export default function CropListPage() {
         body: formData,
       });
       if (!resp.ok) {
-        throw new Error(`Add to UDO failed. Status: ${resp.status}`);
+        throw new Error(`Failed to add crop. Status: ${resp.status}`);
       }
       const data = await resp.json();
       if (data.status !== "success") {
-        throw new Error(data.message || "Add to UDO did not succeed.");
+        throw new Error(data.message || "We couldn't add the crop to UDO.");
       }
 
       const { metadata } = data;
-      console.log("UDO metadata returned:", metadata);
 
-      // Update DynamoDB with new embedding_id
+      // Update DB embedding
       const updatePayload = {
         original_s3_uri: selectedOriginalS3Uri,
         bounding_box: selectedBoundingBox,
         embedding_id: metadata.embedding_id,
       };
-
       await axios.put(`${BASE_API}/api/update_dynamodb_embedding`, updatePayload, {
         headers: { "Content-Type": "application/json" },
       });
 
-      // Also update local state so the button is disabled
       setSimilarityData((prev) =>
         prev ? { ...prev, embedding_id: metadata.embedding_id } : prev
       );
 
-      alert("Crop successfully added to UDO and Dynamo DB updated!");
+      showToast("Crop added to UDO and DB updated.");
     } catch (error) {
       console.error("Add to UDO error:", error);
-      alert("Failed to add crop to UDO. See console for details.");
+      showToast("Unable to add the crop to UDO. Check console for details.");
     }
   }
 
   // --------------------------------------------------------------------------
-  // "Next" => finalize current => pick next unlabeled in same robot
-  // --------------------------------------------------------------------------
-  async function handleNext() {
-    if (!similarityData) return;
-
-    // 1) finalize the current item
-    await finalizeCurrentItem();
-
-    // 2) find the next unlabeled item in selectedRobotCrops
-    const idx = selectedRobotCrops.findIndex(
-      (c) =>
-        c.original_s3_uri === selectedOriginalS3Uri &&
-        c.bounding_box.join(",") === selectedBoundingBox.join(",")
-    );
-    for (let i = idx + 1; i < selectedRobotCrops.length; i++) {
-      if (!selectedRobotCrops[i].labeled) {
-        // found next unlabeled => open similarity
-        handleCropClick(selectedRobotCrops[i]);
-        return;
-      }
-    }
-
-    // If none
-    alert("No more unlabeled items for this robot!");
-    handleCloseModal();
-  }
-
-  // --------------------------------------------------------------------------
-  // "Finish Labeling" => finalize current => close modal
-  // --------------------------------------------------------------------------
-  async function handleFinish() {
-    if (!similarityData) return;
-    await finalizeCurrentItem();
-    alert("Crop updated. Labeling session ended.");
-    handleCloseModal();
-  }
-
-  // --------------------------------------------------------------------------
-  // finalizeCurrentItem => updates DB (server) once, removing any action param
+  // finalizeCurrentItem
   // --------------------------------------------------------------------------
   async function finalizeCurrentItem() {
     if (!similarityData) return;
     const currentSimilar = similarityData.similar_crop_metadata;
     const currentIncoming = similarityData.incoming_crop_metadata;
 
-    // Possibly update UDO if metadata changed
     let updateSimilarPromise = Promise.resolve();
     let updateIncomingPromise = Promise.resolve();
 
-    // If similar metadata changed => update Pinecone/CSV
     if (JSON.stringify(currentSimilar) !== JSON.stringify(originalSimilar)) {
       const simEmbeddingId = currentSimilar.embedding_id;
       if (simEmbeddingId) {
@@ -339,7 +289,6 @@ export default function CropListPage() {
         formDataSim.append("modifier", currentSimilar.modifier || "");
         formDataSim.append("labeler_name", currentSimilar.labeler_name || "");
         formDataSim.append("pick_point", currentSimilar.pick_point || "");
-
         updateSimilarPromise = axios.put(
           `${BASE_API}/api/update/${simEmbeddingId}`,
           formDataSim,
@@ -348,7 +297,6 @@ export default function CropListPage() {
       }
     }
 
-    // If incoming metadata changed => update Pinecone/CSV
     if (
       JSON.stringify(currentIncoming) !== JSON.stringify(originalIncoming) &&
       similarityData.embedding_id
@@ -360,10 +308,8 @@ export default function CropListPage() {
       formDataIn.append("shape", currentIncoming.shape || "");
       formDataIn.append("comment", currentIncoming.comment || "");
       formDataIn.append("modifier", currentIncoming.modifier || "");
-      // NEW: get labeler from the *incoming* metadata
       formDataIn.append("labeler_name", currentIncoming.labeler_name || "");
       formDataIn.append("pick_point", currentIncoming.pick_point || "");
-
       updateIncomingPromise = axios.put(
         `${BASE_API}/api/update/${similarityData.embedding_id}`,
         formDataIn,
@@ -373,11 +319,10 @@ export default function CropListPage() {
 
     await Promise.all([updateSimilarPromise, updateIncomingPromise]);
 
-    // Now also update the DB row
     const updatePayload = {
       original_s3_uri: selectedOriginalS3Uri,
       bounding_box: selectedBoundingBox,
-      labeler_name: labelerName || "", // This is for Dynamo
+      labeler_name: labelerName || "",
       difficult: difficult,
       incoming_crop_metadata: currentIncoming,
       similar_crop_metadata: currentSimilar,
@@ -385,24 +330,195 @@ export default function CropListPage() {
     };
 
     try {
-      const dynamoResp = await axios.put(
-        `${BASE_API}/api/update_dynamodb`,
-        updatePayload,
-        { headers: { "Content-Type": "application/json" } }
-      );
-      console.log("finalizeCurrentItem response:", dynamoResp.data);
+      await axios.put(`${BASE_API}/api/update_dynamodb`, updatePayload, {
+        headers: { "Content-Type": "application/json" },
+      });
     } catch (error) {
       console.error("Error updating DynamoDB:", error);
-      alert("Failed to update DynamoDB. Check console for details.");
+      showToast("Could not save your changes. See console for details.");
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Next
+  // --------------------------------------------------------------------------
+  async function handleNext() {
+    if (!similarityData) return;
+    try {
+      await finalizeCurrentItem();
+      showToast("Crop updated; moving to next.");
+    } catch (err) {
+      console.error(err);
+      showToast("Error finalizing crop. Check console for details.");
+    }
+
+    const idx = selectedRobotCrops.findIndex(
+      (c) =>
+        c.original_s3_uri === selectedOriginalS3Uri &&
+        c.bounding_box.join(",") === selectedBoundingBox.join(",")
+    );
+    for (let i = idx + 1; i < selectedRobotCrops.length; i++) {
+      if (!selectedRobotCrops[i].labeled) {
+        handleCropClick(selectedRobotCrops[i]);
+        return;
+      }
+    }
+    showToast("No more unlabeled items for this robot!");
+    handleCloseModal();
+  }
+
+  // --------------------------------------------------------------------------
+  // Finish
+  // --------------------------------------------------------------------------
+  async function handleFinish() {
+    if (!similarityData) return;
+    try {
+      await finalizeCurrentItem();
+      showToast("Crop changes saved. Session ended.");
+    } catch (err) {
+      console.error(err);
+      showToast("Error finalizing crop. Check console for details.");
+    }
+    handleCloseModal();
+  }
+
+  // --------------------------------------------------------------------------
+  // Single delete
+  // --------------------------------------------------------------------------
+  async function handleDeleteSingle(crop: CropItem) {
+    try {
+      const boxString = crop.bounding_box.join(",");
+      const url = `${BASE_API}/api/delete_item?original_s3_uri=${encodeURIComponent(
+        crop.original_s3_uri
+      )}&bounding_box=${boxString}`;
+
+      const resp = await axios.delete(url);
+      if (resp.data.status === "ok") {
+        const updatedCrops = selectedRobotCrops.filter(
+          (c) =>
+            !(
+              c.original_s3_uri === crop.original_s3_uri &&
+              c.bounding_box.join(",") === boxString
+            )
+        );
+        setSelectedRobotCrops(updatedCrops);
+        showToast("Item removed from the database.");
+      }
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      showToast("Could not remove the item. See console for details.");
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Multi-select
+  // --------------------------------------------------------------------------
+  function handleToggleSelect(crop: CropItem) {
+    const key = crop.original_s3_uri + "|" + crop.bounding_box.join(",");
+    const newSet = new Set(selectedItems);
+    if (newSet.has(key)) {
+      newSet.delete(key);
+    } else {
+      newSet.add(key);
+    }
+    setSelectedItems(newSet);
+  }
+
+  function isItemSelected(crop: CropItem) {
+    const key = crop.original_s3_uri + "|" + crop.bounding_box.join(",");
+    return selectedItems.has(key);
+  }
+
+  // --------------------------------------------------------------------------
+  // Mark unreviewed
+  // --------------------------------------------------------------------------
+  async function handleMarkUnreviewed() {
+    if (selectedItems.size === 0) {
+      showToast("Please select at least one item.");
+      return;
+    }
+    const itemsPayload = Array.from(selectedItems).map((k) => {
+      const [orig, boxStr] = k.split("|");
+      const coords = boxStr.split(",").map(Number);
+      return {
+        original_s3_uri: orig,
+        bounding_box: coords,
+      };
+    });
+
+    try {
+      const resp = await axios.put(`${BASE_API}/api/mark_unreviewed`, {
+        items: itemsPayload,
+      });
+      // e.g. "1 item(s) moved to shard=UNLABELED."
+      const msg = resp.data.message || "Selected items moved to Not Reviewed.";
+      showToast(msg);
+
+      const updatedCrops = selectedRobotCrops.map((c) => {
+        const key = c.original_s3_uri + "|" + c.bounding_box.join(",");
+        if (selectedItems.has(key)) {
+          return { ...c, labeled: false };
+        }
+        return c;
+      });
+      setSelectedRobotCrops(updatedCrops);
+      setSelectedItems(new Set());
+    } catch (err) {
+      console.error("Mark unreviewed error:", err);
+      showToast("Couldn't mark items as unreviewed. See console for details.");
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Delete selection
+  // --------------------------------------------------------------------------
+  async function handleDeleteSelection() {
+    if (selectedItems.size === 0) {
+      showToast("Please select at least one item.");
+      return;
+    }
+  
+    if (!window.confirm("Are you sure you want to remove these items from the database?")) {
+      return;
+    }
+  
+    let countDeleted = 0;
+    const newSet = new Set(selectedItems);
+    const selectedArray = Array.from(selectedItems);
+  
+    for (const key of selectedArray) {
+      const [orig, boxStr] = key.split("|");
+      const coords = boxStr.split(",").map(Number);
+  
+      try {
+        const url = `${BASE_API}/api/delete_item?original_s3_uri=${encodeURIComponent(
+          orig
+        )}&bounding_box=${coords.join(",")}`;
+        const resp = await axios.delete(url);
+        if (resp.data.status === "ok") {
+          newSet.delete(key);
+          countDeleted++;
+        }
+      } catch (error) {
+        console.error("Error deleting item:", error);
+      }
+    }
+  
+    const updatedCrops = selectedRobotCrops.filter((c) => {
+      const k = c.original_s3_uri + "|" + c.bounding_box.join(",");
+      return !selectedItems.has(k);
+    });
+  
+    setSelectedRobotCrops(updatedCrops);
+    setSelectedItems(newSet);
+    showToast(`Removed ${countDeleted} item(s) from the database.`);
+  }
+  
   // --------------------------------------------------------------------------
   // Render
   // --------------------------------------------------------------------------
   const showFolderIcons = !selectedRobot;
 
-  // If a robot is selected, we can compute how many are labeled vs. total
   let labeledCount = 0;
   let totalCount = 0;
   if (selectedRobotCrops.length > 0) {
@@ -413,11 +529,30 @@ export default function CropListPage() {
     totalCount === 0 ? 0 : (labeledCount / totalCount) * 100;
 
   return (
-    <div style={{ background: "#f3f4f6" }}>
-      {/* Sliding Menu */}
+    <div style={{ background: "#f3f4f6", position: "relative" }}>
       <SlidingMenu />
 
-      {/* Main Content */}
+      {/* Floating toast at bottom-center */}
+      {toastVisible && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "20px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "rgba(0,0,0,0.8)",
+            color: "#fff",
+            padding: "10px 20px",
+            borderRadius: "6px",
+            zIndex: 9999,
+            boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+            fontSize: "14px",
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
+
       <div
         style={{
           padding: "2.5rem",
@@ -426,7 +561,8 @@ export default function CropListPage() {
           textAlign: "center",
         }}
       >
-        {/* Logo Image Centered */}
+        {/* We removed the old status banner. Now using showToast for ephemeral messages. */}
+
         <img
           src="https://endwaste.io/assets/logo_footer.png"
           alt="Glacier Logo"
@@ -525,7 +661,7 @@ export default function CropListPage() {
 
         {selectedRobot && (
           <div>
-            {/* Container for back button and title */}
+            {/* Back button + Robot title */}
             <div
               style={{
                 position: "relative",
@@ -534,7 +670,6 @@ export default function CropListPage() {
                 paddingBottom: "1rem",
               }}
             >
-              {/* Back Button with Arrow - Aligned Left */}
               <button
                 onClick={() => {
                   handleCloseModal();
@@ -554,7 +689,6 @@ export default function CropListPage() {
                 <span style={{ fontSize: "16px" }}>←</span> Back
               </button>
 
-              {/* Robot Title - Centered */}
               <h2
                 style={{
                   fontSize: "16px",
@@ -571,7 +705,54 @@ export default function CropListPage() {
               </h2>
             </div>
 
-            {/* Table - Left-aligned */}
+            {/* If items are selected => multi-select bar */}
+            {selectedItems.size > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "1rem",
+                  padding: "0 1rem",
+                }}
+              >
+                <span style={{ fontSize: "15px" }}>
+                  {selectedItems.size} items selected
+                </span>
+
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button
+                    onClick={handleMarkUnreviewed}
+                    style={{
+                      backgroundColor: "#6c757d",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "4px",
+                      padding: "0.3rem 0.5rem",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                    }}
+                  >
+                    Mark as Not Reviewed
+                  </button>
+                  <button
+                    onClick={handleDeleteSelection}
+                    style={{
+                      backgroundColor: "#b94a48",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "4px",
+                      padding: "0.3rem 0.5rem",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                    }}
+                  >
+                    Delete Selection
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div style={{ overflowX: "auto" }}>
               <table
                 style={{
@@ -596,90 +777,111 @@ export default function CropListPage() {
                     <th
                       style={{
                         padding: "12px",
-                        borderBottom: "2px solid #D1D5DB",
-                        textAlign: "left",
+                        paddingLeft: "24px",
                       }}
                     >
+                      Select
+                    </th>
+                    <th style={{ padding: "12px", paddingLeft: "24px" }}>
                       Original S3 URI
                     </th>
-                    <th
-                      style={{
-                        padding: "12px",
-                        borderBottom: "2px solid #D1D5DB",
-                        textAlign: "left",
-                      }}
-                    >
-                      Bounding Box
-                    </th>
-                    <th
-                      style={{
-                        padding: "12px",
-                        borderBottom: "2px solid #D1D5DB",
-                        textAlign: "left",
-                      }}
-                    >
-                      Reviewed?
-                    </th>
-                    <th
-                      style={{
-                        padding: "12px",
-                        borderBottom: "2px solid #D1D5DB",
-                        textAlign: "left",
-                      }}
-                    >
-                      Labeler
-                    </th>
+                    <th style={{ padding: "12px" }}>Bounding Box</th>
+                    <th style={{ padding: "12px" }}>Reviewed?</th>
+                    <th style={{ padding: "12px" }}>Labeler</th>
+                    <th style={{ padding: "12px" }}>Delete</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedRobotCrops.map((crop, idx) => (
-                    <tr
-                      key={idx}
-                      onClick={() => handleCropClick(crop)}
-                      style={{
-                        cursor: "pointer",
-                        borderBottom: "1px solid #E5E7EB",
-                        transition: "background 0.2s ease-in-out",
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = "#F9FAFB")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "transparent")
-                      }
-                    >
-                      <td
-                        style={{
-                          padding: "12px",
-                          wordBreak: "break-word",
-                          color: "#1F2937",
-                          fontWeight: "500",
-                        }}
-                      >
-                        {crop.original_s3_uri}
-                      </td>
-                      <td style={{ padding: "12px", color: "#4B5563" }}>
-                        {crop.bounding_box.join(", ")}
-                      </td>
-                      <td
-                        style={{
-                          padding: "12px",
-                          fontWeight: "600",
-                          color: crop.labeled ? "#10B981" : "#EF4444",
-                        }}
-                      >
-                        {crop.labeled ? "Yes" : "No"}
-                      </td>
-                      <td style={{ padding: "12px", color: "#4B5563" }}>
-                        {crop.labeler_name || "-"}
-                      </td>
-                    </tr>
-                  ))}
+                  {selectedRobotCrops.map((crop, idx) => {
+                    const isSelected = isItemSelected(crop);
+                    const boundingStr = crop.bounding_box.join(", ");
+                    return (
+                      <tr key={idx} style={{ borderBottom: "1px solid #E5E7EB" }}>
+                        <td
+                          style={{
+                            padding: "12px",
+                            paddingLeft: "24px",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelect(crop)}
+                          />
+                        </td>
+
+                        <td
+                          style={{
+                            padding: "12px",
+                            paddingLeft: "24px",
+                            wordBreak: "break-word",
+                            color: "#1F2937",
+                            fontWeight: "500",
+                            cursor: "pointer",
+                          }}
+                          onClick={() => handleCropClick(crop)}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.background = "#F9FAFB")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.background = "transparent")
+                          }
+                        >
+                          {crop.original_s3_uri}
+                        </td>
+
+                        <td
+                          style={{ padding: "12px", color: "#4B5563", cursor: "pointer" }}
+                          onClick={() => handleCropClick(crop)}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.background = "#F9FAFB")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.background = "transparent")
+                          }
+                        >
+                          {boundingStr}
+                        </td>
+
+                        <td style={{ padding: "12px" }}>
+                          <span
+                            style={{
+                              fontWeight: "600",
+                              color: crop.labeled ? "#10B981" : "#EF4444",
+                            }}
+                          >
+                            {crop.labeled ? "Yes" : "No"}
+                          </span>
+                        </td>
+
+                        <td style={{ padding: "12px", color: "#4B5563" }}>
+                          {crop.labeler_name || "-"}
+                        </td>
+
+                        <td style={{ padding: "8px" }}>
+                          <button
+                            onClick={() => handleDeleteSingle(crop)}
+                            style={{
+                              backgroundColor: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: 0,
+                            }}
+                          >
+                            <img
+                              src="https://cdn-icons-png.flaticon.com/512/1214/1214428.png"
+                              alt="Delete"
+                              style={{ width: "18px", height: "18px" }}
+                            />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            {/* Wider Progress Bar */}
             <div
               style={{
                 margin: "12px 0",
@@ -715,7 +917,6 @@ export default function CropListPage() {
         )}
       </div>
 
-      {/* Render your separate SimilarityModal */}
       <SimilarityModal
         showModal={showModal}
         similarityData={similarityData}

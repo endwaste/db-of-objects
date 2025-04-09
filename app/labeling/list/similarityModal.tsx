@@ -143,17 +143,11 @@ export default function SimilarityModal({
 
   const data = similarityData;
 
-  // -------------------------------
-  // Option A Implementation:
-  // Whenever user changes the labelerName text,
-  // also copy it into the crop metadata objects
-  // so that the difference is detected in finalizeCurrentItem().
-  // -------------------------------
+  // Whenever user changes the labelerName text, also copy it into the
+  // incoming/similar so it can be saved if the user does finalizeCurrentItem().
   function handleLabelerNameChange(newVal: string) {
     setLabelerName(newVal);
 
-    // Also store in incoming & similar so that finalizeCurrentItem()
-    // sees it as changed
     const updatedIncoming = {
       ...data.incoming_crop_metadata,
       labeler_name: newVal,
@@ -174,14 +168,14 @@ export default function SimilarityModal({
     onUpdateSimilarityData({
       ...data,
       incoming_crop_metadata: updated,
-    } as SimilarityResult);
+    });
   }
 
   function handleSimilarMetaChange(updated: Record<string, any>) {
     onUpdateSimilarityData({
       ...data,
       similar_crop_metadata: updated,
-    } as SimilarityResult);
+    });
   }
 
   // Add pick point for "Incoming Crop"
@@ -202,7 +196,7 @@ export default function SimilarityModal({
         ...data.incoming_crop_metadata,
         pick_point: newStr,
       },
-    } as SimilarityResult);
+    });
   }
 
   // Add pick point for "Similar Crop"
@@ -223,7 +217,7 @@ export default function SimilarityModal({
         ...data.similar_crop_metadata,
         pick_point: newStr,
       },
-    } as SimilarityResult);
+    });
   }
 
   function handleClearPickPoints(isIncoming: boolean) {
@@ -234,7 +228,7 @@ export default function SimilarityModal({
           ...data.incoming_crop_metadata,
           pick_point: "",
         },
-      } as SimilarityResult);
+      });
     } else {
       onUpdateSimilarityData({
         ...data,
@@ -242,7 +236,7 @@ export default function SimilarityModal({
           ...data.similar_crop_metadata,
           pick_point: "",
         },
-      } as SimilarityResult);
+      });
     }
   }
 
@@ -255,14 +249,14 @@ export default function SimilarityModal({
         embedding_id: data.embedding_id,
       });
 
-      alert("Deleted from UDO!");
+      // success, remove embedding_id from local state
       onUpdateSimilarityData({
         ...data,
         embedding_id: null,
-      } as SimilarityResult);
+      });
     } catch (err) {
       console.error("Delete from UDO failed:", err);
-      alert("Failed to delete from UDO. Check console for details.");
+      // Use parent's setStatusMessage or just log.
     }
   }
 
@@ -310,7 +304,8 @@ export default function SimilarityModal({
           background: "#fff",
           borderRadius: "8px",
           padding: "1rem",
-          width: "80%",
+          width: "90%",
+          maxWidth: "1000px",
           maxHeight: "90vh",
           overflowY: "auto",
           boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
@@ -577,7 +572,6 @@ export default function SimilarityModal({
             <input
               type="text"
               value={labelerName}
-              // NEW: call a function that sets local state + updates metadata
               onChange={(e) => handleLabelerNameChange(e.target.value)}
               style={{
                 padding: "4px 6px",

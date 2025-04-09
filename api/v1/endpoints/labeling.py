@@ -323,6 +323,83 @@ def update_dynamodb_embedding(payload: UpdateDynamoDBEmbeddingRequest):
     )
     return {"message": "DB updated with new embedding_id."}
 
+# ---------------------------------------------------------------------
+#  Models for bulk "mark_unreviewed"
+# ---------------------------------------------------------------------
+
+class ItemIdentifier(BaseModel):
+    original_s3_uri: str
+    bounding_box: List[float]
+
+class BulkItemsPayload(BaseModel):
+    items: List[ItemIdentifier]
+
+
+@router.delete("/delete_item")
+def delete_item(original_s3_uri: str, bounding_box: str):
+    """
+    Delete a single item from DynamoDB. 
+    - The bounding_box query param is a comma-separated string of 4 floats or ints (e.g. "100,200,300,400").
+    - On success => return {"status": "ok"}.
+    """
+    # 1) Parse bounding_box from query string
+
+    try:
+        coords = [float(x) for x in bounding_box.split(",")]
+        if len(coords) != 4:
+            raise ValueError
+    except:
+        raise HTTPException(status_code=400, detail="Invalid bounding_box query param")
+
+    item = find_item_by_s3_and_box(original_s3_uri, coords)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found in DB")
+
+    # 2) Delete from table using the known shard + s3_uri_bounding_box
+    table.delete_item(
+        Key={"shard": item["shard"], "s3_uri_bounding_box": item["s3_uri_bounding_box"]}
+    )
+
+    return {"status": "ok", "message": "Item deleted from DynamoDB."}
+
+
+@router.put("/mark_unreviewed")
+def mark_unreviewed(payload: BulkItemsPayload):
+    """
+    Bulk "Mark as not reviewed".
+    For each item => move from shard="LABELED" back to shard="UNLABELED" and set labeled="false".
+    """
+    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    processed = 0
+
+    for single_item in payload.items:
+        item_obj = find_item_by_s3_and_box(single_item.original_s3_uri, single_item.bounding_box)
+        if not item_obj:
+            continue  # skip if item not found
+
+        old_shard = item_obj["shard"]
+        old_key = item_obj["s3_uri_bounding_box"]
+
+        # If it's already "UNLABELED", no need to do anything
+        if old_shard == "UNLABELED":
+            continue
+
+        # 1) Delete old item
+        table.delete_item(Key={"shard": old_shard, "s3_uri_bounding_box": old_key})
+
+        # 2) Insert new item with shard="UNLABELED", labeled="false"
+        new_item = dict(item_obj)
+        new_item["shard"] = "UNLABELED"
+        new_item["labeled"] = "false"
+        new_item["updated_timestamp"] = now_str
+
+        table.put_item(Item=new_item)
+        processed += 1
+
+    return {
+        "status": "ok",
+        "message": f"{processed} item(s) moved to shard=UNLABELED."
+    }
 
 # ---------------------------------------------------------------------
 # Helpers
